@@ -116,11 +116,17 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
         item { SectionLabel("Live job search") }
         item {
             SurfaceCard {
-                KeyField("Reed API key (recommended)", form.reedKey) { v -> vm.edit { it.copy(reedKey = v) } }
-                LinkText("Free key from Reed's Jobseeker API") { uri.openUri("https://www.reed.co.uk/developers/jobseeker") }
-                Spacer(Modifier.height(14.dp))
+                Text(
+                    "One key is enough. Serper is the easiest: sign in with Google and copy the key from your dashboard.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                )
+                Spacer(Modifier.height(12.dp))
                 KeyField("Serper API key", form.serperKey) { v -> vm.edit { it.copy(serperKey = v) } }
                 LinkText("2,500 free searches at serper.dev") { uri.openUri("https://serper.dev") }
+                Spacer(Modifier.height(14.dp))
+                KeyField("Reed API key (optional)", form.reedKey) { v -> vm.edit { it.copy(reedKey = v) } }
+                LinkText("Optional: adds salaries and full job details") { uri.openUri("https://www.reed.co.uk/developers/jobseeker") }
                 Spacer(Modifier.height(14.dp))
                 KeyField("Firecrawl API key", form.firecrawlKey) { v -> vm.edit { it.copy(firecrawlKey = v) } }
                 LinkText("Free credits at firecrawl.dev (also reads full listings)") { uri.openUri("https://firecrawl.dev") }

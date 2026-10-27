@@ -118,7 +118,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
                         Text("Live search needs one free key", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Get a free Reed Jobseeker API key (takes a minute), paste it in Settings, then search again.",
+                            "Easiest: sign in at serper.dev with Google, copy your free key, and paste it in Settings.",
                             style = MaterialTheme.typography.bodySmall,
                             color = c.textSecondary,
                         )
@@ -126,7 +126,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
                         Row {
                             SecondaryButton("Open Settings", onClick = onOpenSettings, icon = Icons.Rounded.Settings)
                             Spacer(Modifier.width(8.dp))
-                            SecondaryButton("Get Reed key", onClick = { uri.openUri("https://www.reed.co.uk/developers/jobseeker") })
+                            SecondaryButton("Get Serper key", onClick = { uri.openUri("https://serper.dev") })
                         }
                     }
                 }
