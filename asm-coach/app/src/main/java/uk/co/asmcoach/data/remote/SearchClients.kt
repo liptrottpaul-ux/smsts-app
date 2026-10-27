@@ -7,9 +7,10 @@ import okhttp3.OkHttpClient
 @Serializable
 data class SerperRequest(
     val q: String,
-    val gl: String = "uk",
-    val hl: String = "en",
-    val num: Int = 20,
+    // ISO country code: Serper expects "gb" for the United Kingdom, not "uk".
+    val gl: String? = "gb",
+    val hl: String? = "en",
+    val num: Int? = 20,
     val tbs: String? = null,
 )
 
@@ -28,23 +29,33 @@ data class SerperOrganic(
 class SerperClient(private val http: OkHttpClient) {
     private val json = AppJson
 
+    private suspend fun post(apiKey: String, request: SerperRequest): Pair<Int, String> = Http.postJson(
+        client = http,
+        url = "https://google.serper.dev/search",
+        body = json.encodeToString(SerperRequest.serializer(), request),
+        headers = mapOf("X-API-KEY" to apiKey),
+        serviceName = "Serper",
+    )
+
+    /** Serper errors look like {"message": "...", "statusCode": 400}; fall back to the raw text. */
+    private fun errorMessage(body: String): String =
+        Regex("\"message\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+            ?: body.take(120).ifBlank { "no details" }
+
     suspend fun search(apiKey: String, query: String, pastWeekOnly: Boolean): List<SerperOrganic> {
-        val body = json.encodeToString(
-            SerperRequest.serializer(),
-            SerperRequest(q = query, tbs = if (pastWeekOnly) "qdr:w" else null),
-        )
-        val (code, text) = Http.postJson(
-            client = http,
-            url = "https://google.serper.dev/search",
-            body = body,
-            headers = mapOf("X-API-KEY" to apiKey),
-            serviceName = "Serper",
-        )
+        val full = SerperRequest(q = query, tbs = if (pastWeekOnly) "qdr:w" else null)
+        var (code, text) = post(apiKey, full)
+        if (code == 400) {
+            // Retry with only the query in case an optional parameter was rejected.
+            val retry = post(apiKey, SerperRequest(q = query, gl = null, hl = null, num = null))
+            code = retry.first
+            text = retry.second
+        }
         when (code) {
             in 200..299 -> Unit
             401, 403 -> throw RemoteException("Serper rejected your API key. Check it in Settings.")
             429 -> throw RemoteException("Serper free quota reached. Try Firecrawl or wait.")
-            else -> throw RemoteException("Serper search failed ($code).")
+            else -> throw RemoteException("Serper search failed ($code): ${errorMessage(text)}")
         }
         return try {
             json.decodeFromString(SerperResponse.serializer(), text).organic
