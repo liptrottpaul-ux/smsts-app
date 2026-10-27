@@ -4,6 +4,7 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -181,12 +182,13 @@ val AppTypography = Typography(
     labelSmall = IosType.caption1.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp),
 )
 
+// Material's slots require corner-based shapes; app components use ContinuousShape directly.
 private val AppShapes = Shapes(
-    extraSmall = ContinuousShape(8.dp),
-    small = ContinuousShape(10.dp),
-    medium = ContinuousShape(14.dp),
-    large = ContinuousShape(20.dp),
-    extraLarge = ContinuousShape(24.dp),
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(24.dp),
 )
 
 /** iOS default spring: damping ratio 0.8, response ≈ 0.35 s (stiffness ≈ (2π / 0.35)²). */

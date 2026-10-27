@@ -59,8 +59,8 @@ import androidx.navigation.compose.rememberNavController
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
 import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.ui.components.LocalBottomInset
 import uk.co.asmcoach.ui.components.rememberHaptics
@@ -118,7 +118,7 @@ fun AsmCoachRoot(container: AppContainer) {
             NavHost(
                 navController = nav,
                 startDestination = Tab.Jobs.route,
-                modifier = Modifier.fillMaxSize().hazeSource(hazeState),
+                modifier = Modifier.fillMaxSize().haze(hazeState),
                 // Switching tabs on iOS is instant; a very short fade avoids a hard flash.
                 enterTransition = { fadeIn(tween(120)) },
                 exitTransition = { fadeOut(tween(120)) },
@@ -168,7 +168,7 @@ fun AsmCoachRoot(container: AppContainer) {
             IosTabBar(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .hazeEffect(
+                    .hazeChild(
                         state = hazeState,
                         style = HazeStyle(
                             backgroundColor = c.background,
