@@ -1,0 +1,25 @@
+{
+  "name": "SMSTS Exam Trainer",
+  "short_name": "SMSTS",
+  "description": "SMSTS mock exams, GE700 look-up practice and weak-spot drills.",
+  "start_url": "/smsts-app/",
+  "scope": "/smsts-app/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "icons": [
+    {
+      "src": "/smsts-app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/smsts-app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
