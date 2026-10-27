@@ -6,6 +6,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import uk.co.asmcoach.data.remote.FirecrawlClient
+import uk.co.asmcoach.data.remote.PageFetcher
 import uk.co.asmcoach.data.remote.ReedClient
 import uk.co.asmcoach.data.remote.ReedJob
 import uk.co.asmcoach.data.remote.RemoteException
@@ -27,7 +28,37 @@ class JobRepository(
     private val serper: SerperClient,
     private val firecrawl: FirecrawlClient,
     private val settings: SettingsRepository,
+    private val pages: PageFetcher,
 ) {
+    /**
+     * Opens a board's search-results page and returns the individual vacancies listed on it.
+     * Uses Firecrawl when a key is set (needed for Indeed); Reed pages are also read directly.
+     */
+    suspend fun expandSearchPage(page: JobListing): List<JobListing> {
+        val key = settings.current().firecrawlKey
+        val found = buildList {
+            if (key.isNotBlank()) {
+                runCatching { firecrawl.scrape(key, page.url, maxChars = 60_000) }.getOrNull()
+                    ?.let { addAll(ListingParser.vacanciesFromMarkdown(it, page.url)) }
+            }
+            if (isEmpty() && page.url.contains("reed.co.uk")) {
+                pages.html(page.url)?.let { addAll(ListingParser.vacanciesFromHtml(it, page.url)) }
+            }
+        }
+        return found.distinctBy { it.url }.take(25).map { v ->
+            val context = "${v.title} ${v.context}"
+            JobListing(
+                id = v.url.hashCode().toUInt().toString(16),
+                title = v.title,
+                url = v.url,
+                snippet = v.context.ifBlank { "Listed on ${page.source}: ${page.title}" },
+                source = page.source,
+                location = ListingParser.location(context) ?: page.location,
+                salary = ListingParser.salary(context),
+            )
+        }
+    }
+
     suspend fun search(region: SearchRegion, pastWeekOnly: Boolean): List<JobListing> {
         val s = settings.current()
         return when {
@@ -197,6 +228,44 @@ object ListingParser {
     )
     private val salaryRegex =
         Regex("£\\s?\\d[\\d,.]*k?(?:\\s*(?:-|–|to)\\s*£?\\s?\\d[\\d,.]*k?)?(?:\\s*(?:per annum|a year|p\\.?a\\.?))?", RegexOption.IGNORE_CASE)
+
+    data class Vacancy(val title: String, val url: String, val context: String)
+
+    private val relevantTitle = Regex("(?i)site|construction|manager|supervisor|foreman|build|assistant")
+    private val markdownLink = Regex("\\[([^\\]]{6,160})\\]\\((https?://[^)\\s]+)[^)]*\\)")
+    private val htmlLink = Regex("<a\\b[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
+    /** Pulls single-vacancy links (with a little following text for location/salary) from page markdown. */
+    fun vacanciesFromMarkdown(markdown: String, pageUrl: String): List<Vacancy> =
+        markdownLink.findAll(markdown).mapNotNull { m ->
+            val title = cleanText(m.groupValues[1])
+            val url = absolute(m.groupValues[2], pageUrl)
+            val context = cleanText(markdown.substring(m.range.last + 1, minOf(markdown.length, m.range.last + 360)))
+            Vacancy(title, url, context).takeIf { isSingleVacancy(url) && relevantTitle.containsMatchIn(title) && !title.startsWith("!") }
+        }.toList()
+
+    /** Same, for raw HTML (Reed's server-rendered results). */
+    fun vacanciesFromHtml(html: String, pageUrl: String): List<Vacancy> =
+        htmlLink.findAll(html).mapNotNull { m ->
+            val url = absolute(m.groupValues[1].replace("&amp;", "&"), pageUrl)
+            val title = cleanText(m.groupValues[2].replace(Regex("<[^>]+>"), " "))
+            val context = cleanText(html.substring(m.range.last + 1, minOf(html.length, m.range.last + 1200)).replace(Regex("<[^>]+>"), " "))
+                .take(300)
+            Vacancy(title, url, context).takeIf { title.length in 6..160 && isSingleVacancy(url) && relevantTitle.containsMatchIn(title) }
+        }.toList()
+
+    private fun absolute(url: String, pageUrl: String): String = when {
+        url.startsWith("http") -> url
+        url.startsWith("/") -> Regex("^(https?://[^/]+)").find(pageUrl)?.value.orEmpty() + url
+        else -> url
+    }
+
+    private fun cleanText(raw: String): String = raw
+        .replace(Regex("[*_#>`|\\[\\]]"), " ")
+        .replace(Regex("\\(https?://[^)]*\\)"), " ")
+        .replace(Regex("&[a-z]+;"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
     /** True for a single job advert URL; false for a board's search or category page. */
     fun isSingleVacancy(url: String): Boolean {

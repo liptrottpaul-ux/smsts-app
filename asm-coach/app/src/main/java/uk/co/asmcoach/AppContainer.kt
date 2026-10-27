@@ -11,6 +11,7 @@ import uk.co.asmcoach.data.persist.SessionRepository
 import uk.co.asmcoach.data.remote.FirecrawlClient
 import uk.co.asmcoach.data.remote.GeminiClient
 import uk.co.asmcoach.data.remote.Http
+import uk.co.asmcoach.data.remote.PageFetcher
 import uk.co.asmcoach.data.remote.ReedClient
 import uk.co.asmcoach.data.remote.SerperClient
 import uk.co.asmcoach.data.remote.UpdateChecker
@@ -25,7 +26,7 @@ class AppContainer(val app: Context) {
 
     val settings = SettingsRepository(app)
     val gemini = GeminiClient(http, settings)
-    val jobs = JobRepository(ReedClient(http), SerperClient(http), FirecrawlClient(http), settings)
+    val jobs = JobRepository(ReedClient(http), SerperClient(http), FirecrawlClient(http), settings, PageFetcher(http))
     val strategyAgent = StrategyAgent(gemini)
     val coachAgent = CoachAgent(gemini)
     val interviewAgent = InterviewAgent(gemini)

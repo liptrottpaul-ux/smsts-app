@@ -118,7 +118,7 @@ class FirecrawlClient(private val http: OkHttpClient) {
     }
 
     /** Returns the page's main content as Markdown, trimmed to keep prompts inside free-tier limits. */
-    suspend fun scrape(apiKey: String, url: String): String {
+    suspend fun scrape(apiKey: String, url: String, maxChars: Int = MAX_MARKDOWN): String {
         val (code, text) = Http.postJson(
             client = http,
             url = "$BASE/scrape",
@@ -129,7 +129,7 @@ class FirecrawlClient(private val http: OkHttpClient) {
         checkStatus(code)
         val parsed = decode(FirecrawlScrapeResponse.serializer(), text)
         if (!parsed.success) throw RemoteException(parsed.error ?: "Firecrawl could not read that page.")
-        return parsed.data?.markdown.orEmpty().take(MAX_MARKDOWN)
+        return parsed.data?.markdown.orEmpty().take(maxChars)
     }
 
     private fun checkStatus(code: Int) = when (code) {
@@ -148,5 +148,24 @@ class FirecrawlClient(private val http: OkHttpClient) {
     private companion object {
         const val BASE = "https://api.firecrawl.dev/v1"
         const val MAX_MARKDOWN = 12_000
+    }
+}
+
+/** Plain HTML fetch for boards that serve server-rendered results (Reed). Indeed needs Firecrawl. */
+class PageFetcher(private val http: OkHttpClient) {
+    suspend fun html(url: String): String? {
+        val (code, body) = runCatching {
+            Http.get(
+                client = http,
+                url = url,
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36",
+                    "Accept" to "text/html,application/xhtml+xml",
+                    "Accept-Language" to "en-GB,en;q=0.9",
+                ),
+                serviceName = "Job board",
+            )
+        }.getOrNull() ?: return null
+        return body.takeIf { code in 200..299 && it.isNotBlank() }
     }
 }

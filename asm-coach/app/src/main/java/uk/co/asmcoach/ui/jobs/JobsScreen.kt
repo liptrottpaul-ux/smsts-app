@@ -139,6 +139,13 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
             }
         }
 
+        state.notice?.let { message ->
+            item {
+                TonalCard(tint = c.tintSlate, onClick = vm::dismissNotice, contentPadding = 12.dp) {
+                    Text(message, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+                }
+            }
+        }
         state.error?.let { message ->
             item { ErrorBanner(message, onDismiss = vm::dismissError, actionLabel = "Retry", onAction = vm::search) }
         }
@@ -160,13 +167,8 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
         } else if (state.jobs.isNotEmpty()) {
             item { SectionLabel("${state.jobs.size} roles") }
             items(state.jobs, key = { it.id }) { job ->
-                JobCard(job, briefs[job.id], ready = job.id in packs) {
-                    if (job.isSearchPage) {
-                        uri.openUri(job.url)
-                    } else {
-                        vm.select(job)
-                        onOpenStrategy()
-                    }
+                JobCard(job, briefs[job.id], ready = job.id in packs, expanding = state.expanding == job.id) {
+                    vm.open(job, onOpenStrategy)
                 }
             }
         }
@@ -174,12 +176,12 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
 }
 
 @Composable
-private fun JobCard(job: JobListing, brief: StrategyBrief?, ready: Boolean, onClick: () -> Unit) {
+private fun JobCard(job: JobListing, brief: StrategyBrief?, ready: Boolean, expanding: Boolean, onClick: () -> Unit) {
     val c = AsmTheme.colors
     TonalCard(tint = c.surface, border = !c.isDark, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (job.isSearchPage) {
-                PillBadge("Search page", color = c.textSecondary, background = c.surfaceSunken)
+                PillBadge("Several jobs", color = c.textSecondary, background = c.surfaceSunken)
                 Spacer(Modifier.width(6.dp))
             }
             PillBadge(
@@ -217,7 +219,8 @@ private fun JobCard(job: JobListing, brief: StrategyBrief?, ready: Boolean, onCl
             Spacer(Modifier.weight(1f))
             Text(
                 when {
-                    job.isSearchPage -> "Open on ${job.source}"
+                    expanding -> "Finding the jobs on this page…"
+                    job.isSearchPage -> "Show the jobs on this page"
                     ready -> "Open role · ready"
                     else -> "Prepare for this role"
                 },

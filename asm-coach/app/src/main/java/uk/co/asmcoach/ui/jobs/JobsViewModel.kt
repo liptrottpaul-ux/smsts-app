@@ -21,6 +21,9 @@ data class JobsUiState(
     val jobs: List<JobListing> = emptyList(),
     val searched: Boolean = false,
     val error: String? = null,
+    /** Id of the search-page card currently being opened up into individual jobs. */
+    val expanding: String? = null,
+    val notice: String? = null,
 )
 
 class JobsViewModel(private val container: AppContainer) : ViewModel() {
@@ -61,6 +64,45 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun select(job: JobListing) = container.roles.select(job)
+
+    /**
+     * Opens a role. A board search page is first expanded into the individual vacancies it lists;
+     * if none can be read, the page itself is prepared as the role so the user always gets prep.
+     */
+    fun open(job: JobListing, onOpenRole: () -> Unit) {
+        if (!job.isSearchPage) {
+            select(job)
+            onOpenRole()
+            return
+        }
+        if (_state.value.expanding != null) return
+        _state.update { it.copy(expanding = job.id, notice = null, error = null) }
+        viewModelScope.launch {
+            val found = runCatching { container.jobs.expandSearchPage(job) }.getOrDefault(emptyList())
+            if (found.isNotEmpty()) {
+                _state.update { s ->
+                    val i = s.jobs.indexOfFirst { it.id == job.id }.coerceAtLeast(0)
+                    val known = s.jobs.map { it.url }.toSet()
+                    val fresh = found.filter { it.url !in known }
+                    val merged = s.jobs.toMutableList().apply {
+                        removeAll { it.id == job.id }
+                        addAll(i.coerceAtMost(size), fresh)
+                    }
+                    s.copy(
+                        jobs = merged,
+                        expanding = null,
+                        notice = "Found ${found.size} jobs on that ${job.source} page. Tap one to prepare for it.",
+                    )
+                }
+            } else {
+                _state.update { it.copy(expanding = null) }
+                select(job.copy(isSearchPage = false))
+                onOpenRole()
+            }
+        }
+    }
+
+    fun dismissNotice() = _state.update { it.copy(notice = null) }
 
     fun dismissError() = _state.update { it.copy(error = null) }
 }

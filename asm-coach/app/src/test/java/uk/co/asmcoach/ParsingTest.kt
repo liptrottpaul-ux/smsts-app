@@ -100,4 +100,24 @@ class ParsingTest {
         assertEquals(uk.co.asmcoach.data.content.Sector.Housebuilder, uk.co.asmcoach.data.content.QuestionBank.sectorOf("120 plot NHBC development"))
         assertEquals(uk.co.asmcoach.data.content.Sector.Refurb, uk.co.asmcoach.data.content.QuestionBank.sectorOf("Live school refurbishment"))
     }
+
+    @Test
+    fun `extracts single vacancies from a board search page`() {
+        val md = """
+            # Assistant Site Manager jobs in Liverpool
+            [Assistant Site Manager](https://uk.indeed.com/rc/clk?jk=abc123&from=serp) Acme Homes Liverpool £42,000 a year
+            [Sign in](https://uk.indeed.com/account/login)
+            [Assistant Site Manager - Housing](https://uk.indeed.com/viewjob?jk=def456) Wirral
+        """.trimIndent()
+        val found = ListingParser.vacanciesFromMarkdown(md, "https://uk.indeed.com/q-assistant-site-manager-l-liverpool-jobs.html")
+        assertEquals(2, found.size)
+        assertEquals("Assistant Site Manager", found[0].title)
+        assertEquals(true, found[0].context.contains("£42,000"))
+
+        val html = """<a class="job" href="/jobs/assistant-site-manager/54123456?source=search">Assistant <b>Site</b> Manager</a> Manchester
+            <a href="/jobs/assistant-site-manager-jobs-in-manchester">More jobs</a>"""
+        val reed = ListingParser.vacanciesFromHtml(html, "https://www.reed.co.uk/jobs/assistant-site-manager-jobs-in-manchester")
+        assertEquals(1, reed.size)
+        assertEquals("https://www.reed.co.uk/jobs/assistant-site-manager/54123456?source=search", reed[0].url)
+    }
 }
