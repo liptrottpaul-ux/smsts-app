@@ -5,6 +5,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -89,6 +93,7 @@ fun AsmCoachRoot(container: AppContainer) {
             }
         },
     ) { padding ->
+        Box(Modifier.fillMaxSize()) {
         NavHost(
             navController = nav,
             startDestination = Tab.Jobs.route,
@@ -124,6 +129,14 @@ fun AsmCoachRoot(container: AppContainer) {
             ) {
                 SettingsScreen(container, onBack = { nav.popBackStack() })
             }
+        }
+            // Opaque strip behind the status bar so scrolled content never collides with the clock.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+                    .background(c.background),
+            )
         }
     }
 }
