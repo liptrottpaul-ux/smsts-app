@@ -70,7 +70,8 @@ class GeminiClient(
         prompt: String,
         temperature: Float = 0.7f,
         fast: Boolean = false,
-    ): String = call(system, prompt, temperature, jsonMode = false, fast = fast)
+        quick: Boolean = false,
+    ): String = call(system, prompt, temperature, jsonMode = false, fast = fast, quick = quick)
 
     suspend fun <T> generateStructured(
         serializer: KSerializer<T>,
@@ -78,8 +79,9 @@ class GeminiClient(
         prompt: String,
         temperature: Float = 0.6f,
         fast: Boolean = false,
+        quick: Boolean = false,
     ): T {
-        val raw = call(system, prompt, temperature, jsonMode = true, fast = fast)
+        val raw = call(system, prompt, temperature, jsonMode = true, fast = fast, quick = quick)
         return try {
             json.decodeFromString(serializer, JsonText.extract(raw))
         } catch (e: SerializationException) {
@@ -95,10 +97,17 @@ class GeminiClient(
         temperature: Float,
         jsonMode: Boolean,
         fast: Boolean,
+        quick: Boolean = false,
     ): String {
         val s = settings.current()
         if (!s.hasGemini) {
             throw RemoteException("Add your free Gemini API key in Settings to use the AI coach.")
+        }
+        if (quick) {
+            // Live interview reactions: one fast attempt on the lightest model; callers fall back locally.
+            val (code, body) = send(s.geminiKey, LITE_MODEL, system, prompt, temperature, jsonMode, fast = true)
+            if (code !in 200..299) throw RemoteException(describeError(code, body, LITE_MODEL))
+            return parse(body)
         }
         val (code, body, model) = sendWithRetry(s.geminiKey, s.geminiModel, system, prompt, temperature, jsonMode, fast)
             .let { first ->

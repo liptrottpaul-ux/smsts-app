@@ -113,6 +113,8 @@ data class Turn(
     /** Display name and job title when the panel comes from a role pack. */
     val name: String? = null,
     val role: String? = null,
+    /** True when the interviewer is probing the previous answer rather than asking a new question. */
+    val followUp: Boolean = false,
 ) {
     val speakerName: String? get() = name ?: persona?.displayName
     val speakerRole: String? get() = role ?: persona?.role
@@ -130,11 +132,50 @@ data class Evaluation(
     val overallScore: Int = 0,
     val readinessBand: String = "",
     val headline: String = "",
+    /** 0–100: how likely this performance is to get an offer against a typical shortlist. */
+    val offerLikelihood: Int = 0,
+    val offerVerdict: String = "",
+    val likelihoodReasons: List<String> = emptyList(),
+    val toRaiseIt: List<String> = emptyList(),
+    val redFlags: List<String> = emptyList(),
+    val answerReviews: List<AnswerReview> = emptyList(),
     val competencies: List<CompetencyScore> = emptyList(),
     val strengths: List<String> = emptyList(),
     val improvements: List<String> = emptyList(),
     val starCritique: List<StarCritique> = emptyList(),
     val betterAnswers: List<BetterAnswer> = emptyList(),
+)
+
+/** Feedback on one question thread (the question plus any follow-ups). */
+@Serializable
+data class AnswerReview(
+    val question: String = "",
+    val yourAnswer: String = "",
+    val score: Int = 0,
+    val situation: Int = 0,
+    val task: Int = 0,
+    val action: Int = 0,
+    val result: Int = 0,
+    val whatWorked: String = "",
+    val whatWasMissing: String = "",
+    val betterAnswer: String = "",
+)
+
+/** The interviewer's live reaction to an answer. */
+@Serializable
+data class Reaction(
+    val action: String = "move_on",
+    val ack: String = "",
+    val spokenText: String = "",
+)
+
+/** Instant score for one practised answer in Prep. */
+@Serializable
+data class DrillScore(
+    val score: Int = 0,
+    val verdict: String = "",
+    val feedback: String = "",
+    val betterAnswer: String = "",
 )
 
 @Serializable

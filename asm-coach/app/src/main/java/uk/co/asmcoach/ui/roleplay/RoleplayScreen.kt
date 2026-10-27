@@ -81,6 +81,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uk.co.asmcoach.AppContainer
+import uk.co.asmcoach.data.model.AnswerReview
 import uk.co.asmcoach.data.model.CrisisScenario
 import uk.co.asmcoach.data.model.Evaluation
 import uk.co.asmcoach.data.model.InterviewMode
@@ -109,7 +110,7 @@ import uk.co.asmcoach.ui.theme.AsmTheme
 import java.text.DateFormat
 import java.util.Date
 
-private val lengths = listOf(3 to "Quick · 3", 5 to "Standard · 5", 8 to "Full · 8")
+private val lengths = listOf(4 to "Quick · 4", 8 to "Full · 8", 12 to "Panel · 12")
 
 @Composable
 fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: () -> Unit) {
@@ -469,7 +470,7 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                PillBadge("Question ${(state.answered + 1).coerceAtMost(state.total)} of ${state.total}")
+                PillBadge(if (state.onFollowUp) "Follow-up · question ${state.mainAsked} of ${state.total}" else "Question ${state.mainAsked.coerceAtLeast(1)} of ${state.total}")
                 Spacer(Modifier.weight(1f))
                 if (state.phase == Phase.Paused) {
                     CircleIconButton(Icons.Rounded.PlayArrow, "Resume", vm::resume)
@@ -480,7 +481,7 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
                 CircleIconButton(Icons.Rounded.Close, "End and score", vm::endEarly)
             }
             Spacer(Modifier.height(10.dp))
-            MeterBar(state.answered / state.total.coerceAtLeast(1).toFloat(), c.accent)
+            MeterBar((state.mainAsked - 1).coerceAtLeast(0) / state.total.coerceAtLeast(1).toFloat(), c.accent)
         }
 
         item {
@@ -503,7 +504,7 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
                             Spacer(Modifier.width(10.dp))
-                            Text("The panel is conferring…", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
+                            Text("${seat.name} is making a note…", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
                         }
                     } else if (text == null) {
                         Text("Waiting for the panel.", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
@@ -688,7 +689,7 @@ private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: Role
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            LargeTitleHeader(eyebrow = "Post-interview evaluation", title = "Your readiness")
+            LargeTitleHeader(eyebrow = "Post-interview evaluation", title = "How you did")
         }
         item {
             SurfaceCard {
@@ -703,6 +704,21 @@ private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: Role
                     Spacer(Modifier.height(10.dp))
                     Text(evaluation.headline, style = MaterialTheme.typography.bodyLarge, color = c.textPrimary, textAlign = TextAlign.Center)
                 }
+            }
+        }
+        if (evaluation.offerVerdict.isNotBlank() || evaluation.offerLikelihood > 0) {
+            item { OfferCard(evaluation) }
+        }
+        if (evaluation.redFlags.isNotEmpty()) {
+            item {
+                SectionLabel("Red flags a panel would mark down")
+                TonalCard(tint = c.tintRose) { Bullets(evaluation.redFlags, dotColor = c.bad) }
+            }
+        }
+        if (evaluation.answerReviews.isNotEmpty()) {
+            item { SectionLabel("Every answer, reviewed") }
+            itemsIndexed(evaluation.answerReviews) { index, review ->
+                AnswerReviewCard(index, review, speakingId, vm)
             }
         }
         if (evaluation.competencies.isNotEmpty()) {
@@ -733,7 +749,7 @@ private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: Role
                 TonalCard(tint = c.tintRose) { Bullets(evaluation.improvements, dotColor = c.bad) }
             }
         }
-        if (evaluation.starCritique.isNotEmpty()) {
+        if (evaluation.answerReviews.isEmpty() && evaluation.starCritique.isNotEmpty()) {
             item { SectionLabel("STAR critique") }
             items(evaluation.starCritique) { critique ->
                 SurfaceCard {
@@ -754,7 +770,7 @@ private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: Role
                 }
             }
         }
-        if (evaluation.betterAnswers.isNotEmpty()) {
+        if (evaluation.answerReviews.isEmpty() && evaluation.betterAnswers.isNotEmpty()) {
             item { SectionLabel("Better answers you should have used") }
             items(evaluation.betterAnswers.size) { index ->
                 val answer = evaluation.betterAnswers[index]
@@ -777,6 +793,82 @@ private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: Role
         item {
             Spacer(Modifier.height(8.dp))
             PrimaryButton("Run another interview", onClick = vm::reset, icon = Icons.Rounded.Refresh, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun OfferCard(evaluation: Evaluation) {
+    val c = AsmTheme.colors
+    val likelihood = evaluation.offerLikelihood
+    TonalCard(tint = if (likelihood >= 60) c.tintSage else if (likelihood >= 35) c.tintAmber else c.tintRose) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ScoreRing(likelihood, size = 84.dp, stroke = 8.dp, caption = "%")
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Chance of an offer", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                Text(evaluation.offerVerdict.ifBlank { "Offer likelihood" }, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
+                Text(
+                    "Against a typical shortlist for this role, on this performance.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                )
+            }
+        }
+        if (evaluation.likelihoodReasons.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text("Why", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Spacer(Modifier.height(6.dp))
+            Bullets(evaluation.likelihoodReasons, dotColor = c.slate)
+        }
+        if (evaluation.toRaiseIt.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text("To raise your chances", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Spacer(Modifier.height(6.dp))
+            Bullets(evaluation.toRaiseIt, dotColor = c.good)
+        }
+    }
+}
+
+@Composable
+private fun AnswerReviewCard(index: Int, review: AnswerReview, speakingId: String?, vm: RoleplayViewModel) {
+    val c = AsmTheme.colors
+    var open by rememberSaveable { mutableStateOf(review.score <= 3) }
+    SurfaceCard(onClick = { open = !open }) {
+        Row(verticalAlignment = Alignment.Top) {
+            Text(review.question, style = MaterialTheme.typography.titleSmall, color = c.textPrimary, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(10.dp))
+            PillBadge("${review.score}/5", color = c.scoreColor(review.score * 20), background = c.surfaceSunken)
+        }
+        if (open) {
+            if (review.yourAnswer.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text("You said: ${review.yourAnswer}", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StarPip("S", review.situation, Modifier.weight(1f))
+                StarPip("T", review.task, Modifier.weight(1f))
+                StarPip("A", review.action, Modifier.weight(1f))
+                StarPip("R", review.result, Modifier.weight(1f))
+            }
+            if (review.whatWorked.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text("Worked: ${review.whatWorked}", style = MaterialTheme.typography.bodyMedium, color = c.good)
+            }
+            if (review.whatWasMissing.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text("Missing: ${review.whatWasMissing}", style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+            }
+            if (review.betterAnswer.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                ReadAloudBox(
+                    text = review.betterAnswer,
+                    speaking = speakingId == "review-$index",
+                    onToggle = { vm.toggleSpeak("review-$index", review.betterAnswer) },
+                    label = "A better answer",
+                )
+            }
         }
     }
 }

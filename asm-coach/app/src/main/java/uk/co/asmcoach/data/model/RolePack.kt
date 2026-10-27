@@ -34,6 +34,8 @@ data class BankQuestion(
     val question: String = "",
     val lookingFor: String = "",
     val modelAnswer: String = "",
+    /** Follow-ups a real interviewer would use to dig into a thin answer. */
+    val probes: List<String> = emptyList(),
 )
 
 @Serializable
@@ -46,9 +48,17 @@ data class RoleScenario(
 
 object QuestionCategory {
     const val MOTIVATION = "Motivation"
-    const val TECHNICAL = "Technical"
     const val SAFETY = "Safety"
+    const val QUALITY = "Quality"
+    const val PROGRAMME = "Programme"
+    const val PEOPLE = "People"
     const val COMMERCIAL = "Commercial"
+    const val TECHNICAL = "Technical"
     const val DIGITAL = "Digital"
-    val ALL = listOf(MOTIVATION, TECHNICAL, SAFETY, COMMERCIAL, DIGITAL)
+    const val CUSTOMER = "Customer"
+    const val SCENARIO = "Scenario"
+
+    /** Categories the role pack is asked to cover. */
+    val PACK = listOf(MOTIVATION, SAFETY, QUALITY, PROGRAMME, PEOPLE, COMMERCIAL, TECHNICAL, DIGITAL)
+    val ALL = PACK + listOf(CUSTOMER, SCENARIO)
 }

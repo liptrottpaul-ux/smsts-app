@@ -6,6 +6,7 @@ import uk.co.asmcoach.data.agent.InterviewAgent
 import uk.co.asmcoach.data.agent.RolePackAgent
 import uk.co.asmcoach.data.agent.StrategyAgent
 import uk.co.asmcoach.data.persist.FirestoreSync
+import uk.co.asmcoach.data.persist.PracticeStore
 import uk.co.asmcoach.data.persist.SessionRepository
 import uk.co.asmcoach.data.remote.FirecrawlClient
 import uk.co.asmcoach.data.remote.GeminiClient
@@ -32,4 +33,5 @@ class AppContainer(val app: Context) {
     val tts = TextToSpeechManager(app)
     val roles = RoleRepository(app, jobs, strategyAgent, RolePackAgent(gemini), settings, sessions)
     val updates = UpdateChecker(http)
+    val practice = PracticeStore(app)
 }

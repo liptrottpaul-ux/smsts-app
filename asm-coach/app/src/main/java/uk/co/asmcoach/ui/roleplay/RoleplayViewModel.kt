@@ -3,6 +3,8 @@ package uk.co.asmcoach.ui.roleplay
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -12,8 +14,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.data.agent.InterviewConfig
+import uk.co.asmcoach.data.content.QuestionBank
+import uk.co.asmcoach.data.content.Sector
 import uk.co.asmcoach.data.model.BankQuestion
 import uk.co.asmcoach.data.model.CrisisScenario
 import uk.co.asmcoach.data.model.Evaluation
@@ -26,6 +31,8 @@ import uk.co.asmcoach.data.model.SessionKind
 import uk.co.asmcoach.data.model.SessionRecord
 import uk.co.asmcoach.data.model.Speaker
 import uk.co.asmcoach.data.model.Turn
+import uk.co.asmcoach.data.persist.InterviewResult
+import uk.co.asmcoach.data.persist.PracticeStore
 import uk.co.asmcoach.data.remote.AppJson
 import uk.co.asmcoach.voice.SpeechRecognizerManager
 import uk.co.asmcoach.voice.VoiceStyle
@@ -38,8 +45,14 @@ data class Seat(val name: String, val role: String, val voice: Persona) {
     val initials: String get() = name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1) }
 }
 
-/** A pre-written question from the role pack, asked instantly with no AI call. */
-private data class PlannedQuestion(val seat: Int, val text: String, val bank: BankQuestion?)
+/** A main question in this interview: from the role pack or the researched bank. */
+private data class PlannedQuestion(
+    val seat: Int,
+    val text: String,
+    val bank: BankQuestion,
+    val key: String,
+    val fromRole: Boolean = false,
+)
 
 /** What the live interview loop is doing right now. */
 enum class Phase { Thinking, Speaking, Listening, Typing, Paused, Idle }
@@ -50,9 +63,11 @@ data class RoleplayUiState(
     val scenario: CrisisScenario = CrisisScenario.HseVisit,
     /** Index into the role pack's own scenarios, used instead of [scenario] when a pack is active. */
     val roleScenarioIndex: Int = 0,
-    val questionCount: Int = 5,
-    /** Questions in this interview (the bank can hold fewer than [questionCount]). */
-    val total: Int = 5,
+    val questionCount: Int = 8,
+    /** Main questions in this interview; follow-ups come on top. */
+    val total: Int = 8,
+    val mainAsked: Int = 0,
+    val onFollowUp: Boolean = false,
     val seats: List<Seat> = emptyList(),
     val activeSeat: Seat? = null,
     val tailorToJob: Boolean = true,
@@ -71,10 +86,13 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
 
     private val recognizer = SpeechRecognizerManager(container.app)
     private val tts = container.tts
+    private val practice = container.practice
     private var loop: Job? = null
     private var typedOnly = false
     private var plan: List<PlannedQuestion> = emptyList()
     private var planIndex = 0
+    private var probesOnCurrent = 0
+    private var threadStart = 0
 
     private val _state = MutableStateFlow(RoleplayUiState())
     val state: StateFlow<RoleplayUiState> = _state.asStateFlow()
@@ -91,13 +109,14 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
     fun prepareRole() {
         targetJob.value?.let { container.roles.prepare(it) }
     }
+
     val speakingId = tts.speakingId
     val history: StateFlow<List<SessionRecord>> = container.sessions.recent
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val voiceInputAvailable: Boolean = recognizer.isAvailable
 
-    /** The panel runs on Gemini; without a key the interview can't start. */
+    /** Scoring needs Gemini; without a key the interview can't start. */
     val hasGemini: StateFlow<Boolean> = container.settings.settings
         .map { it.hasGemini }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -132,19 +151,20 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         typedOnly = !voice || !voiceInputAvailable
         val s = _state.value
         val activePack = activePack()
-        plan = activePack?.let { buildPlan(it, s) }.orEmpty()
-        planIndex = 0
         val seats = activePack?.panel?.takeIf { it.isNotEmpty() }
             ?.mapIndexed { i, m -> Seat(m.name, m.role, Persona.entries[i % Persona.entries.size]) }
             ?: s.mode.personas.map { Seat(it.displayName, it.role, it) }
-        val total = if (plan.isNotEmpty()) minOf(s.questionCount, plan.size) else s.questionCount
+        plan = buildPlan(activePack, seats, s)
+        planIndex = 0
+        probesOnCurrent = 0
+        threadStart = 0
         _state.update {
             it.copy(
                 stage = Stage.Live, transcript = emptyList(), evaluation = null, error = null, liveText = "",
-                seats = seats, activeSeat = seats.first(), total = total,
+                seats = seats, activeSeat = seats.first(), total = plan.size, mainAsked = 0, onFollowUp = false,
             )
         }
-        runLoop { interviewerTurn() }
+        runLoop { askNextMain() }
     }
 
     private fun activePack(): RolePack? = pack.value?.takeIf { _state.value.tailorToJob && it.questions.isNotEmpty() }
@@ -162,37 +182,106 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
             panel = activePack?.panel.orEmpty(),
             roleScenario = activePack?.scenarios?.getOrNull(s.roleScenarioIndex)
                 ?.takeIf { s.mode == InterviewMode.CrisisSimulation },
-            askedQuestions = plan.take(planIndex).mapNotNull { it.bank },
+            askedQuestions = plan.take(planIndex).map { it.bank },
         )
     }
 
-    /** Orders the role pack's questions for the chosen mode, alternating categories. */
-    private fun buildPlan(pack: RolePack, s: RoleplayUiState): List<PlannedQuestion> {
-        fun bank(categories: List<String>): List<PlannedQuestion> {
-            val byCategory = categories.map { cat -> pack.questions.filter { it.category.equals(cat, ignoreCase = true) } }
-            val interleaved = buildList {
-                val longest = byCategory.maxOfOrNull { it.size } ?: 0
-                for (i in 0 until longest) byCategory.forEach { list -> list.getOrNull(i)?.let(::add) }
+    /**
+     * Picks this interview's main questions: role-pack questions plus the researched bank, filtered
+     * to the employer type, rotating categories, and putting never-asked questions first so repeat
+     * sessions don't churn the same few questions.
+     */
+    private fun buildPlan(pack: RolePack?, seats: List<Seat>, s: RoleplayUiState): List<PlannedQuestion> {
+        val asked = practice.data.value.asked
+        val job = targetJob.value?.takeIf { s.tailorToJob }
+        val sector = job?.let { QuestionBank.sectorOf("${it.title} ${it.snippet} ${it.company.orEmpty()}") }
+        val candidates = buildList {
+            pack?.questions?.forEach { q ->
+                add(PlannedQuestion(q.askedBy.coerceIn(0, seats.lastIndex), q.question, q, PracticeStore.keyOf(q.question), fromRole = true))
             }
-            val rest = pack.questions.filter { it !in interleaved }
-            return (interleaved + rest).map { PlannedQuestion(it.askedBy, it.question, it) }
+            QuestionBank.all
+                .filter { it.sector == Sector.Any || it.sector == sector || (sector == null && it.sector == Sector.Contractor) }
+                .forEach { c ->
+                    val bank = BankQuestion(c.category, 0, c.question, c.lookingFor, "", c.probes)
+                    add(PlannedQuestion(seatFor(c.category, seats), c.question, bank, c.id))
+                }
         }
-        return when (s.mode) {
-            InterviewMode.StandardPanel -> bank(QuestionCategory.ALL)
-            InterviewMode.DigitalSiteTech -> bank(listOf(QuestionCategory.DIGITAL, QuestionCategory.TECHNICAL, QuestionCategory.COMMERCIAL))
-            InterviewMode.TechnicalTradeQa -> bank(listOf(QuestionCategory.TECHNICAL, QuestionCategory.SAFETY, QuestionCategory.DIGITAL))
-            InterviewMode.CrisisSimulation -> {
-                val scenario = pack.scenarios.getOrNull(s.roleScenarioIndex) ?: pack.scenarios.firstOrNull()
-                if (scenario == null) {
-                    bank(listOf(QuestionCategory.SAFETY, QuestionCategory.TECHNICAL))
-                } else {
-                    val qs = scenario.questions.ifEmpty { listOf("What do you do first, and who do you call?") }
-                    val opening = PlannedQuestion(scenario.askedBy, "Let's run a live scenario. ${scenario.briefing} ${qs.first()}", null)
-                    listOf(opening) + qs.drop(1).map { PlannedQuestion(scenario.askedBy, it, null) } +
-                        bank(listOf(QuestionCategory.SAFETY, QuestionCategory.TECHNICAL))
+        val order = when (s.mode) {
+            InterviewMode.StandardPanel -> listOf(
+                QuestionCategory.MOTIVATION, QuestionCategory.SAFETY, QuestionCategory.PEOPLE, QuestionCategory.QUALITY,
+                QuestionCategory.PROGRAMME, QuestionCategory.COMMERCIAL, QuestionCategory.TECHNICAL,
+                QuestionCategory.SCENARIO, QuestionCategory.CUSTOMER, QuestionCategory.DIGITAL,
+            )
+            InterviewMode.CrisisSimulation -> listOf(
+                QuestionCategory.SCENARIO, QuestionCategory.SAFETY, QuestionCategory.PEOPLE, QuestionCategory.PROGRAMME,
+            )
+            InterviewMode.DigitalSiteTech -> listOf(
+                QuestionCategory.DIGITAL, QuestionCategory.PROGRAMME, QuestionCategory.QUALITY, QuestionCategory.COMMERCIAL,
+            )
+            InterviewMode.TechnicalTradeQa -> listOf(
+                QuestionCategory.TECHNICAL, QuestionCategory.QUALITY, QuestionCategory.SAFETY,
+            )
+        }
+        // Within a category: least-asked first, role-specific before generic, then shuffled for variety.
+        val pools = order.associateWith { cat ->
+            candidates.filter { it.bank.category.equals(cat, ignoreCase = true) }
+                .shuffled()
+                .sortedWith(compareBy({ asked[it.key] ?: 0 }, { if (it.fromRole) 0 else 1 }))
+                .toMutableList()
+        }
+        val chosen = mutableListOf<PlannedQuestion>()
+        if (s.mode == InterviewMode.CrisisSimulation) {
+            scenarioOpening(pack, seats, s)?.let { chosen += it }
+        }
+        var progress = true
+        while (chosen.size < s.questionCount && progress) {
+            progress = false
+            for (cat in order) {
+                if (chosen.size >= s.questionCount) break
+                val next = pools[cat]?.removeFirstOrNull() ?: continue
+                if (chosen.none { it.key == next.key }) {
+                    chosen += next
+                    progress = true
                 }
             }
         }
+        return chosen
+    }
+
+    private fun scenarioOpening(pack: RolePack?, seats: List<Seat>, s: RoleplayUiState): PlannedQuestion? {
+        val sc = pack?.scenarios?.getOrNull(s.roleScenarioIndex) ?: pack?.scenarios?.firstOrNull()
+        return if (sc != null) {
+            val first = sc.questions.firstOrNull() ?: "What do you do first, and who do you call?"
+            val bank = BankQuestion(
+                QuestionCategory.SCENARIO, sc.askedBy, "${sc.briefing} $first",
+                "Safety first, clear priorities and sequence, escalation to the right people, legal duties, records.",
+                "", sc.questions.drop(1),
+            )
+            PlannedQuestion(sc.askedBy.coerceIn(0, seats.lastIndex), "Let's run a live scenario. ${sc.briefing} $first", bank, PracticeStore.keyOf(sc.briefing))
+        } else if (pack == null) {
+            val crisis = s.scenario
+            val bank = BankQuestion(
+                QuestionCategory.SCENARIO, 0, crisis.briefing,
+                "Safety first, clear priorities and sequence, escalation to the right people, legal duties, records.",
+                "", listOf("What's the very first thing you do?", "Who do you call, in what order?"),
+            )
+            PlannedQuestion(seatFor(QuestionCategory.SAFETY, seats), "Let's run a live scenario. ${crisis.briefing} What do you do?", bank, "crisis-${crisis.name}")
+        } else {
+            null
+        }
+    }
+
+    /** Routes a question to the panel member whose job title fits it. */
+    private fun seatFor(category: String, seats: List<Seat>): Int {
+        fun find(vararg words: String) = seats.indexOfFirst { seat -> words.any { seat.role.contains(it, ignoreCase = true) } }
+        val idx = when (category) {
+            QuestionCategory.SAFETY, QuestionCategory.QUALITY, QuestionCategory.SCENARIO, QuestionCategory.TECHNICAL ->
+                find("H&S", "Safety", "SHE", "Quality", "Technical", "Auditor")
+            QuestionCategory.COMMERCIAL, QuestionCategory.DIGITAL -> find("Commercial", "QS", "Surveyor", "Cost")
+            QuestionCategory.PROGRAMME -> find("Project", "Build", "Construction", "Site")
+            else -> 0
+        }
+        return if (idx >= 0) idx else 0
     }
 
     // ---- Live loop ---------------------------------------------------------------------------
@@ -202,39 +291,98 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         loop = viewModelScope.launch { block() }
     }
 
-    private suspend fun interviewerTurn() {
+    private suspend fun askNextMain() {
         val planned = plan.getOrNull(planIndex)
-        val seats = _state.value.seats
-        val (seat, text) = if (planned != null) {
-            // Role pack: the next question is already written, so it's asked immediately.
-            val seat = seats.getOrElse(planned.seat) { seats.first() }
-            val intro = if (planIndex == 0) {
-                "Thanks for coming in, ${container.settings.current().candidateName}. I'm ${seat.name}, ${seat.role}. "
-            } else {
-                ""
-            }
-            planIndex++
-            seat to intro + planned.text
-        } else {
-            _state.update { it.copy(phase = Phase.Thinking, error = null) }
-            val profile = container.settings.current().profile
-            val result = runCatching { container.interviewAgent.nextTurn(config(), profile, _state.value.transcript) }
-            val (persona, line) = result.getOrElse { e ->
-                _state.update { it.copy(phase = Phase.Idle, error = e.message ?: "The panel couldn't respond.") }
-                return
-            }
-            (seats.firstOrNull { it.voice == persona } ?: Seat(persona.displayName, persona.role, persona)) to line
+        if (planned == null) {
+            closeAndEvaluate()
+            return
         }
+        val seats = _state.value.seats
+        val seat = seats.getOrElse(planned.seat) { seats.first() }
+        val intro = if (planIndex == 0) {
+            "Thanks for coming in, ${container.settings.current().candidateName}. I'm ${seat.name}, ${seat.role}. "
+        } else {
+            ""
+        }
+        planIndex++
+        probesOnCurrent = 0
+        threadStart = _state.value.transcript.size
+        speakQuestion(seat, intro + planned.text, followUp = false)
+    }
+
+    private suspend fun speakQuestion(seat: Seat, text: String, followUp: Boolean) {
         _state.update {
             it.copy(
-                transcript = it.transcript + Turn(Speaker.Interviewer, text, seat.voice, seat.name, seat.role),
+                transcript = it.transcript + Turn(Speaker.Interviewer, text, seat.voice, seat.name, seat.role, followUp),
                 activeSeat = seat,
                 phase = Phase.Speaking,
+                mainAsked = planIndex,
+                onFollowUp = followUp,
                 error = null,
             )
         }
         tts.speakAndAwait(text, seat.voice.voice())
         awaitAnswer()
+    }
+
+    /**
+     * After an answer: a short spoken acknowledgement covers a quick AI decision to probe, challenge
+     * or move on. If the AI is slow or busy, an instant local rule picks a realistic probe instead.
+     */
+    private suspend fun react() {
+        val current = plan.getOrNull(planIndex - 1) ?: return askNextMain()
+        val seats = _state.value.seats
+        val seat = seats.getOrElse(current.seat) { seats.first() }
+        if (probesOnCurrent >= MAX_PROBES) return askNextMain()
+
+        val thread = _state.value.transcript.drop(threadStart)
+        _state.update { it.copy(phase = Phase.Thinking, activeSeat = seat) }
+        val followUp = coroutineScope {
+            val ai = async {
+                withTimeoutOrNull(REACTION_TIMEOUT_MS) {
+                    runCatching {
+                        container.interviewAgent.react(
+                            config(), container.settings.current().profile, seat.role, current.text,
+                            current.bank.lookingFor, thread, probesOnCurrent, current.bank.probes,
+                        )
+                    }.getOrNull()
+                }
+            }
+            tts.speakAndAwait(ACKS.random(), seat.voice.voice())
+            val reaction = ai.await()
+            when {
+                reaction == null -> localProbe(current, thread)
+                reaction.action == "move_on" || reaction.spokenText.isBlank() -> null
+                else -> reaction.spokenText
+            }
+        }
+        if (followUp != null) {
+            probesOnCurrent++
+            speakQuestion(seat, followUp, followUp = true)
+        } else {
+            askNextMain()
+        }
+    }
+
+    /** Instant fallback: probes thin answers the way panels do (example, result, ownership). */
+    private fun localProbe(current: PlannedQuestion, thread: List<Turn>): String? {
+        val answer = thread.lastOrNull { it.speaker == Speaker.Candidate }?.text.orEmpty()
+        val alreadyAsked = thread.filter { it.speaker == Speaker.Interviewer }.map { it.text }.toSet()
+        val words = answer.split(Regex("\\s+")).count { it.isNotBlank() }
+        val lower = " ${answer.lowercase()} "
+        val hasResult = Regex("\\d|%|£|result|saved|reduced|finished|completed|delivered|on time|outcome").containsMatchIn(lower)
+        val we = Regex("\\bwe\\b").findAll(lower).count()
+        val me = Regex("\\bi\\b").findAll(lower).count()
+        val options = buildList {
+            if (words < 45) {
+                addAll(current.bank.probes)
+                add(QuestionBank.genericProbes.getValue("example"))
+            }
+            if (we > me * 2 && we >= 3) add(QuestionBank.genericProbes.getValue("ownership"))
+            if (!hasResult && words >= 25) add(QuestionBank.genericProbes.getValue("result"))
+            if (probesOnCurrent == 0 && current.bank.probes.isNotEmpty() && words in 45..140) add(current.bank.probes.first())
+        }
+        return options.firstOrNull { it !in alreadyAsked }
     }
 
     private fun awaitAnswer() {
@@ -275,19 +423,17 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         _state.update {
             it.copy(transcript = it.transcript + Turn(Speaker.Candidate, answer), liveText = "", error = null)
         }
-        runLoop {
-            if (_state.value.answered >= _state.value.total) closeAndEvaluate() else interviewerTurn()
-        }
+        runLoop { react() }
     }
 
-    /** Retry after an error: re-ask if the panel failed, or re-open the floor for an answer. */
+    /** Retry after an error: re-open the floor, or carry on to the next question. */
     fun retry() {
         if (_state.value.evaluationFailed) {
             runLoop { evaluate() }
             return
         }
         val last = _state.value.transcript.lastOrNull()
-        if (last == null || last.speaker == Speaker.Candidate) runLoop { interviewerTurn() } else awaitAnswer()
+        if (last == null || last.speaker == Speaker.Candidate) runLoop { askNextMain() } else awaitAnswer()
     }
 
     fun pause() {
@@ -330,13 +476,18 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         }
         result.onSuccess { evaluation ->
             _state.update { it.copy(stage = Stage.Results, evaluation = evaluation) }
+            val job = targetJob.value?.takeIf { s.tailorToJob }
+            practice.markAsked(plan.take(planIndex).map { it.key })
+            practice.saveInterview(
+                job?.id ?: GENERAL,
+                InterviewResult(evaluation.overallScore, evaluation.offerLikelihood, System.currentTimeMillis()),
+            )
             container.sessions.save(
                 SessionRecord(
                     id = UUID.randomUUID().toString(),
                     kind = SessionKind.Interview,
-                    title = targetJob.value?.takeIf { s.tailorToJob }?.title
-                        ?: (s.mode.title + if (s.mode == InterviewMode.CrisisSimulation) " · ${s.scenario.title}" else ""),
-                    subtitle = evaluation.readinessBand,
+                    title = job?.title ?: (s.mode.title + if (s.mode == InterviewMode.CrisisSimulation) " · ${s.scenario.title}" else ""),
+                    subtitle = listOf(evaluation.readinessBand, "offer ${evaluation.offerLikelihood}%").joinToString(" · "),
                     score = evaluation.overallScore,
                     createdAt = System.currentTimeMillis(),
                     payload = AppJson.encodeToString(Evaluation.serializer(), evaluation),
@@ -377,4 +528,11 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private fun Persona.voice() = VoiceStyle(pitch = pitch, rate = rate, voiceSlot = ordinal)
+
+    companion object {
+        const val GENERAL = "general"
+        private const val MAX_PROBES = 2
+        private const val REACTION_TIMEOUT_MS = 4_000L
+        private val ACKS = listOf("Okay.", "Right.", "Okay, thanks.", "Mm, right.", "Okay. Let me just note that.", "Right, okay.")
+    }
 }

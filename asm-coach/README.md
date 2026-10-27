@@ -78,3 +78,36 @@ app/src/main/java/uk/co/asmcoach/
 
 Masterclass technical content is guidance for interview preparation. On a real project, always
 follow the specification, the manufacturer's tested details and your employer's procedures.
+
+## Realism: research behind the interview
+
+- **Question bank** (`data/content/QuestionBank.kt`): 80+ questions across motivation, H&S, quality,
+  programme, people, commercial, technical, digital, customer and live scenarios. Each has what
+  a strong answer contains and the follow-ups real panels use. Combined with each role's 16
+  generated questions, interviews rotate least-asked questions first, so repeat sessions don't
+  churn the same few.
+- **Reactive panel:** after every answer the interviewer probes, challenges or moves on (up to 2
+  follow-ups per question). A quick Flash-Lite call decides within 4 seconds while a spoken
+  acknowledgement covers the gap. If the AI is slow, local rules probe thin answers the way panels
+  do: "give me a real example", "what did *you* do?", "what was the result in numbers?".
+- **Scoring** mirrors competency-interview practice: 1–5 per answer, ownership of actions and
+  quantified results weigh most, and red flags (unsafe statements, wrong law, blame) are called out.
+  Every answer gets a better-answer script; the evaluation also estimates the **chance of an offer**
+  against a typical shortlist, with reasons and what would raise it.
+- **Prep readiness** (Prep tab) = practised answers scored by the AI (50%), latest mock interview
+  (20%), prep topics reviewed (15%) and a preparation checklist (15%).
+
+Sources used to shape the content: UK interview guidance from
+[Indeed UK](https://uk.indeed.com/career-advice/interviewing/site-manager-interview-questions),
+[Randstad UK](https://www.randstad.co.uk/career-advice/interview-tips/interview-question-tips-site-manager-jobs/) and
+[Workbred](https://workbred.co.uk/career/assistant-site-manager?page=interview); candidate reports for
+[Barratt Redrow](https://www.glassdoor.co.uk/Interview/Barratt-Redrow-Bristol-Interview-Questions-EI_IE10844.0,14_IL.15,22_IC3280589.htm),
+[Bellway](https://www.glassdoor.com/Interview/Bellway-Interview-Questions-E10116.htm),
+[Morgan Sindall](https://www.glassdoor.co.uk/Interview/Morgan-Sindall-Group-Interview-Questions-E12356.htm) and
+[Willmott Dixon](https://www.glassdoor.com/Interview/Willmott-Dixon-Management-Trainee-Interview-Questions-EI_IE36702.0,14_KO15,33.htm);
+competency scoring guidance ([Shine](https://www.shineinterview.com/competency-based-interview-scoring/),
+[build-construct](https://build-construct.com/practical-guide/building-structured-interview-process-home-building-leadership-hires/));
+[NHBC Construction Quality Reviews](https://www.nhbc.co.uk/services/construction-quality/reviews) and key-stage inspection guides;
+[excavation and temporary works guidance](https://humanfocus.co.uk/blog/excavation-safety-temporary-works-inspections-and-service-interfaces-that-prevent-collapse/);
+2026 North West ASM adverts on [Find a Job](https://findajob.dwp.gov.uk/details/18008731).
+Always check regulatory details against HSE guidance (e.g. CDM 2015 L153).

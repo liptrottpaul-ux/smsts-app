@@ -1,6 +1,21 @@
 package uk.co.asmcoach.ui.prep
 
 import androidx.compose.foundation.layout.Arrangement
+import uk.co.asmcoach.ui.components.ScoreRing
+import uk.co.asmcoach.data.persist.DrillResult
+import uk.co.asmcoach.data.content.PrepChecklist
+import uk.co.asmcoach.data.content.ChecklistItem
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextField
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import uk.co.asmcoach.ui.components.SectionLabel
 import uk.co.asmcoach.ui.components.PrimaryButton
 import uk.co.asmcoach.ui.components.TonalCard
@@ -65,6 +80,7 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
     val target by vm.targetJob.collectAsStateWithLifecycle()
     val packs by vm.packs.collectAsStateWithLifecycle()
     val progressMap by vm.progress.collectAsStateWithLifecycle()
+    val practice by vm.practice.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val job = target
@@ -124,6 +140,8 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                 }
             }
             else -> {
+                val readiness = PrepViewModel.readiness(job.id, pack, practice)
+                item { ReadinessCard(readiness, onInterview) }
                 if (pack.roleSummary.isNotBlank()) {
                     item {
                         TonalCard(tint = c.tintSlate) {
@@ -133,12 +151,20 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                         }
                     }
                 }
-                item { SectionLabel("Prep topics for this role") }
+                item { SectionLabel("1 · Before the interview") }
+                item {
+                    SurfaceCard(contentPadding = 8.dp) {
+                        PrepChecklist.items.forEach { item ->
+                            ChecklistRow(item, done = "${job.id}|${item.id}" in practice.done) { vm.toggleChecklist(item.id) }
+                        }
+                    }
+                }
+                item { SectionLabel("2 · Prep topics for this role") }
                 itemsIndexed(pack.prepTopics) { i, topic ->
                     val id = "topic-$i"
                     AccordionCard(
                         title = topic.title,
-                        subtitle = topic.whyItMatters.takeIf { it.isNotBlank() },
+                        subtitle = (if ("${job.id}|$id" in practice.done) "✓ Reviewed · " else "") + topic.whyItMatters,
                         expanded = id in state.expandedLessons,
                         onToggle = { vm.toggleLesson(id) },
                         tint = c.tintSage,
@@ -154,14 +180,18 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                         }
                     }
                 }
-                item { SectionLabel("Questions this panel is likely to ask") }
+                item { SectionLabel("3 · Practise this panel's questions out loud") }
                 itemsIndexed(pack.questions) { i, q ->
                     val id = "q-$i"
+                    val key = PrepViewModel.questionKey(q)
+                    val drill = practice.drills["${job.id}|$key"]
                     AccordionCard(
                         title = q.question,
-                        subtitle = listOfNotNull(q.category.takeIf { it.isNotBlank() }, pack.panel.getOrNull(q.askedBy)?.role)
-                            .joinToString(" · ")
-                            .ifBlank { null },
+                        subtitle = listOfNotNull(
+                            drill?.let { "Best ${it.score}/5" },
+                            q.category.takeIf { it.isNotBlank() },
+                            pack.panel.getOrNull(q.askedBy)?.role,
+                        ).joinToString(" · ").ifBlank { null },
                         expanded = id in state.expandedLessons,
                         onToggle = { vm.toggleLesson(id) },
                     ) {
@@ -171,18 +201,50 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                             Text(q.lookingFor, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
                             Spacer(Modifier.height(12.dp))
                         }
-                        ReadAloudBox(
-                            text = q.modelAnswer,
-                            speaking = speaking == "$id:answer",
-                            onToggle = { vm.toggleSpeak("$id:answer", q.modelAnswer) },
-                            label = "A strong answer from you",
+                        if (q.probes.isNotEmpty()) {
+                            Text("Expect follow-ups like", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                            Spacer(Modifier.height(4.dp))
+                            Bullets(q.probes, dotColor = c.slate)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        DrillPanel(
+                            active = state.drillKey == key,
+                            text = state.drillText,
+                            listening = state.drillListening,
+                            scoring = state.scoring && state.drillKey == key,
+                            voiceAvailable = vm.voiceAvailable,
+                            result = drill,
+                            onStart = { vm.startDrill(key) },
+                            onEdit = vm::editDrill,
+                            onMic = vm::toggleMic,
+                            onScore = { vm.scoreDrill(key, q) },
+                            onCancel = vm::cancelDrill,
+                            speaking = speaking,
+                            speakId = "$id:better",
+                            onSpeak = vm::toggleSpeak,
                         )
+                        Spacer(Modifier.height(12.dp))
+                        if (key in state.revealed || drill != null) {
+                            ReadAloudBox(
+                                text = q.modelAnswer,
+                                speaking = speaking == "$id:answer",
+                                onToggle = { vm.toggleSpeak("$id:answer", q.modelAnswer) },
+                                label = "Model answer",
+                            )
+                        } else {
+                            Text(
+                                "Show model answer (try it yourself first)",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = c.accent,
+                                modifier = Modifier.clickable { vm.reveal(key) }.padding(vertical = 6.dp),
+                            )
+                        }
                     }
                 }
                 item {
                     Spacer(Modifier.height(4.dp))
                     PrimaryButton(
-                        "Interview for this role",
+                        "4 · Mock interview for this role",
                         onClick = onInterview,
                         icon = Icons.Rounded.Mic,
                         modifier = Modifier.fillMaxWidth(),
@@ -217,6 +279,163 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ReadinessCard(r: Readiness, onInterview: () -> Unit) {
+    val c = AsmTheme.colors
+    TonalCard(tint = if (r.percent >= 80) c.tintSage else if (r.percent >= 45) c.tintAmber else c.tintRose) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ScoreRing(r.percent, size = 96.dp, stroke = 9.dp, caption = "ready")
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Interview readiness", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                Text(r.verdict, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
+                r.lastOfferLikelihood?.let {
+                    Text("Last mock: ${r.lastInterviewScore}/100 · offer chance $it%", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        ReadinessBar(
+            "Questions practised",
+            "${r.questionsPractised}/${r.questionsTotal}" + if (r.questionsPractised > 0) " · avg ${"%.1f".format(r.averageScore)}/5" else "",
+            r.questionsPractised.toFloat() / r.questionsTotal.coerceAtLeast(1) * (r.averageScore.toFloat() / 5f).coerceAtLeast(0.2f),
+        )
+        ReadinessBar("Prep topics reviewed", "${r.topicsReviewed}/${r.topicsTotal}", r.topicsReviewed.toFloat() / r.topicsTotal.coerceAtLeast(1))
+        ReadinessBar("Preparation steps", "${r.checklistDone}/${r.checklistTotal}", r.checklistDone.toFloat() / r.checklistTotal.coerceAtLeast(1))
+        ReadinessBar("Mock interview", r.lastInterviewScore?.let { "$it/100" } ?: "not done", (r.lastInterviewScore ?: 0) / 100f)
+        if (r.nextSteps.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Text("Do next", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Spacer(Modifier.height(6.dp))
+            Bullets(r.nextSteps.take(4))
+        }
+        if (r.percent >= 50) {
+            Spacer(Modifier.height(12.dp))
+            SecondaryButton("Mock interview", onClick = onInterview, icon = Icons.Rounded.Mic)
+        }
+    }
+}
+
+@Composable
+private fun ReadinessBar(label: String, value: String, fraction: Float) {
+    val c = AsmTheme.colors
+    Column(Modifier.padding(vertical = 5.dp)) {
+        Row {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = c.textPrimary, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+        }
+        Spacer(Modifier.height(4.dp))
+        MeterBar(fraction, c.accent)
+    }
+}
+
+@Composable
+private fun ChecklistRow(item: ChecklistItem, done: Boolean, onToggle: () -> Unit) {
+    val c = AsmTheme.colors
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+            contentDescription = if (done) "Done" else "Not done",
+            tint = if (done) c.good else c.textTertiary,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(item.title, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Text(item.detail, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+        }
+    }
+}
+
+@Composable
+private fun DrillPanel(
+    active: Boolean,
+    text: String,
+    listening: Boolean,
+    scoring: Boolean,
+    voiceAvailable: Boolean,
+    result: DrillResult?,
+    onStart: () -> Unit,
+    onEdit: (String) -> Unit,
+    onMic: () -> Unit,
+    onScore: () -> Unit,
+    onCancel: () -> Unit,
+    speaking: String?,
+    speakId: String,
+    onSpeak: (String, String) -> Unit,
+) {
+    val c = AsmTheme.colors
+    if (result != null && !active) {
+        TonalCard(tint = if (result.score >= 4) c.tintSage else if (result.score == 3) c.tintAmber else c.tintRose, contentPadding = 14.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Your best: ${result.score}/5", style = MaterialTheme.typography.titleSmall, color = c.textPrimary, modifier = Modifier.weight(1f))
+                Text(
+                    "Try again",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = c.accent,
+                    modifier = Modifier.clickable(onClick = onStart).padding(6.dp),
+                )
+            }
+            if (result.feedback.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(result.feedback, style = MaterialTheme.typography.bodySmall, color = c.textPrimary)
+            }
+            if (result.betterAnswer.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                ReadAloudBox(
+                    text = result.betterAnswer,
+                    speaking = speaking == speakId,
+                    onToggle = { onSpeak(speakId, result.betterAnswer) },
+                    label = "Better version of your answer",
+                )
+            }
+        }
+        return
+    }
+    if (!active) {
+        PrimaryButton("Practise this answer", onClick = onStart, icon = Icons.Rounded.Mic, modifier = Modifier.fillMaxWidth())
+        return
+    }
+    Column(Modifier.fillMaxWidth()) {
+        TextField(
+            value = text,
+            onValueChange = onEdit,
+            placeholder = { Text(if (voiceAvailable) "Tap the mic and answer out loud, or type…" else "Type your answer…") },
+            minLines = 4,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = c.surfaceSunken,
+                unfocusedContainerColor = c.surfaceSunken,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = c.accent,
+            ),
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (voiceAvailable) {
+                SecondaryButton(if (listening) "Done" else "Speak", onClick = onMic, icon = if (listening) Icons.Rounded.Stop else Icons.Rounded.Mic)
+            }
+            PrimaryButton(
+                if (scoring) "Scoring…" else "Score it",
+                onClick = onScore,
+                loading = scoring,
+                enabled = text.isNotBlank() && !listening,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            "Cancel",
+            style = MaterialTheme.typography.labelLarge,
+            color = c.textSecondary,
+            modifier = Modifier.clickable(onClick = onCancel).padding(vertical = 8.dp),
+        )
     }
 }
 

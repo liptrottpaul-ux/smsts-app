@@ -71,6 +71,77 @@ class InterviewAgent(private val gemini: GeminiClient) {
         return persona to text
     }
 
+    /**
+     * Decides, in one quick call, whether the panel probes, challenges or moves on after an answer.
+     * Callers must handle failure (they fall back to an instant local probe).
+     */
+    suspend fun react(
+        config: InterviewConfig,
+        profile: CandidateProfile,
+        speakerRole: String,
+        question: String,
+        lookingFor: String,
+        thread: List<Turn>,
+        probesSoFar: Int,
+        suggestedProbes: List<String>,
+    ): Reaction {
+        val prompt = buildString {
+            appendLine("Role: ${config.job?.title ?: "Assistant Site Manager"}${config.job?.company?.let { " at $it" } ?: ""}")
+            appendLine("Candidate: ${profile.name}, returning to site after 8 years in M&A; 10 years in roofing, waterproofing, drylining; HND; SMSTS.")
+            appendLine("You are the $speakerRole.")
+            appendLine("Main question: $question")
+            if (lookingFor.isNotBlank()) appendLine("A strong answer contains: $lookingFor")
+            appendLine("Exchange on this question so far:")
+            appendLine(thread.render())
+            appendLine("Follow-ups already asked on this question: $probesSoFar (maximum 2).")
+            if (suggestedProbes.isNotEmpty()) appendLine("Follow-ups real panels use here: ${suggestedProbes.joinToString(" | ")}")
+            appendLine()
+            appendLine(
+                "Decide like a real UK construction interviewer. Probe if the last answer was vague, hypothetical, " +
+                    "said 'we' without personal actions, had no result or numbers, or skipped the key point. Challenge " +
+                    "(politely but firmly) if it was wrong on safety, law or technique. Move on if it was complete and " +
+                    "specific, or if 2 follow-ups have been asked.",
+            )
+            appendLine(
+                "Return JSON: {\"action\": \"probe\" | \"challenge\" | \"move_on\", " +
+                    "\"ack\": \"a short, natural, neutral reaction, max 10 words, no praise beyond 'okay' or 'right'\", " +
+                    "\"spokenText\": \"the follow-up question, max 30 words, specific to what they just said; empty if move_on\"}",
+            )
+        }
+        val r = gemini.generateStructured(Reaction.serializer(), SYSTEM_INTERVIEWER, prompt, temperature = 0.7f, quick = true)
+        return r.copy(
+            ack = r.ack.replace(Regex("[*#_`]"), "").trim(),
+            spokenText = r.spokenText.replace(Regex("[*#_`]"), "").trim(),
+        )
+    }
+
+    /** Scores one practised answer from the Prep tab against what the panel looks for. */
+    suspend fun scoreDrill(
+        profile: CandidateProfile,
+        jobTitle: String?,
+        question: String,
+        lookingFor: String,
+        answer: String,
+    ): DrillScore {
+        val prompt = buildString {
+            appendLine(profile.toPromptBlock())
+            appendLine()
+            appendLine("Role: ${jobTitle ?: "Assistant Site Manager"}")
+            appendLine("Interview question: $question")
+            if (lookingFor.isNotBlank()) appendLine("A strong answer contains: $lookingFor")
+            appendLine("Candidate's spoken answer: $answer")
+            appendLine()
+            appendLine(
+                "Score it as a UK construction panel would (1 = poor, 3 = acceptable, 5 = outstanding: specific, " +
+                    "personal actions, quantified result, correct regulations). Return JSON: {\"score\": 1-5, " +
+                    "\"verdict\": \"one line\", \"feedback\": \"2-3 sentences: exactly what was missing or wrong\", " +
+                    "\"betterAnswer\": \"a 90-130 word spoken answer in first person using only the candidate's real background\"}",
+            )
+        }
+        val r = gemini.generateStructured(DrillScore.serializer(), SYSTEM_EVALUATOR, prompt, temperature = 0.4f, fast = true)
+        return r.copy(score = r.score.coerceIn(1, 5))
+    }
+
     suspend fun evaluate(
         config: InterviewConfig,
         profile: CandidateProfile,
@@ -95,6 +166,16 @@ class InterviewAgent(private val gemini: GeminiClient) {
         return evaluation.copy(
             overallScore = evaluation.overallScore.coerceIn(0, 100),
             competencies = evaluation.competencies.map { it.copy(score = it.score.coerceIn(0, 100)) },
+            offerLikelihood = evaluation.offerLikelihood.coerceIn(0, 100),
+            answerReviews = evaluation.answerReviews.map {
+                it.copy(
+                    score = it.score.coerceIn(1, 5),
+                    situation = it.situation.coerceIn(0, 5),
+                    task = it.task.coerceIn(0, 5),
+                    action = it.action.coerceIn(0, 5),
+                    result = it.result.coerceIn(0, 5),
+                )
+            },
             starCritique = evaluation.starCritique.map {
                 it.copy(
                     situation = it.situation.coerceIn(0, 5),
@@ -129,7 +210,7 @@ class InterviewAgent(private val gemini: GeminiClient) {
 
     private fun List<Turn>.render(): String = joinToString("\n") { turn ->
         when (turn.speaker) {
-            Speaker.Interviewer -> "${turn.speakerRole ?: "Interviewer"}: ${turn.text}"
+            Speaker.Interviewer -> "${turn.speakerRole ?: "Interviewer"}${if (turn.followUp) " (follow-up)" else ""}: ${turn.text}"
             Speaker.Candidate -> "Candidate: ${turn.text}"
         }
     }
@@ -156,25 +237,30 @@ class InterviewAgent(private val gemini: GeminiClient) {
         """.trimIndent()
 
         val EVALUATION_SCHEMA = """
+            Group the transcript into question threads: each main question plus its follow-ups.
             Return a single JSON object:
             {
               "overallScore": integer 0-100 readiness score,
               "readinessBand": "Interview-ready" | "Nearly there" | "Needs practice" | "Not yet",
               "headline": "one sentence verdict",
-              "competencies": [{"name": "e.g. H&S leadership", "score": 0-100}] (4-6 items relevant to the mode),
+              "offerLikelihood": integer 0-100, the realistic chance this performance gets an offer against a typical
+                 shortlist for this role (experienced ASMs and internal candidates); be honest, not encouraging,
+              "offerVerdict": "Likely offer" | "Borderline" | "Unlikely",
+              "likelihoodReasons": ["3-4 reasons driving that likelihood, citing what was said"],
+              "toRaiseIt": ["3 specific changes that would raise the likelihood most"],
+              "redFlags": ["anything a real panel would mark down hard: unsafe statements, wrong law, blame, vagueness; empty if none"],
+              "competencies": [{"name": "e.g. H&S leadership", "score": 0-100}] (5-7 items relevant to the role),
               "strengths": ["3 specific strengths with quotes or evidence"],
               "improvements": ["3 specific, actionable improvements"],
-              "starCritique": [{
-                 "question": "the question asked",
-                 "answerSummary": "one-sentence summary of what the candidate said",
+              "answerReviews": [{
+                 "question": "the main question",
+                 "yourAnswer": "1-2 sentence summary of what the candidate actually said, including follow-ups",
+                 "score": 1-5 (1 poor, 3 acceptable, 5 outstanding),
                  "situation": 0-5, "task": 0-5, "action": 0-5, "result": 0-5,
-                 "critique": "2 sentences: what was missing and why it matters"
-              }] (one per candidate answer),
-              "betterAnswers": [{
-                 "question": "the question",
-                 "whyItWins": "one sentence",
-                 "script": "the exact 90-140 word answer they should have given, first person"
-              }] (for the 3 weakest answers)
+                 "whatWorked": "1 sentence",
+                 "whatWasMissing": "1-2 sentences: the specific gap and why a panel cares",
+                 "betterAnswer": "the exact 90-140 word answer they should have given, first person, using only their real background"
+              }] (one per question thread, in order)
             }
         """.trimIndent()
     }

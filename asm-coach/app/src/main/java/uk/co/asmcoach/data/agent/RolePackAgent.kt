@@ -61,12 +61,14 @@ class RolePackAgent(private val gemini: GeminiClient) {
                  "points": ["4-5 specific things to know or mention"], "sayThis": "70-100 word spoken talking point in first person"}
               ] (5 topics),
               "questions": [
-                {"category": one of ${QuestionCategory.ALL.joinToString { "\"$it\"" }},
+                {"category": one of ${QuestionCategory.PACK.joinToString { "\"$it\"" }},
                  "askedBy": panel index 0-2 (match the member's focus),
-                 "question": "the exact question as spoken aloud, max 40 words, specific to this role",
+                 "question": "the exact question as spoken aloud, max 40 words, specific to this role and listing",
                  "lookingFor": "1 sentence: what a strong answer must contain",
-                 "modelAnswer": "90-130 word STAR answer in first person"}
-              ] (12 questions: at least 2 per category),
+                 "modelAnswer": "90-130 word STAR answer in first person",
+                 "probes": ["2 follow-ups this interviewer would use if the answer is thin"]}
+              ] (16 questions: 2 per category; include the hard ones a real panel would ask this candidate,
+                 e.g. the 8 years away from site, managing experienced trades, site software they haven't used),
               "scenarios": [
                 {"title": "short name", "briefing": "2-sentence live incident plausible on THIS type of project",
                  "askedBy": panel index, "questions": ["3 escalating follow-up questions, each adding a new complication"]}

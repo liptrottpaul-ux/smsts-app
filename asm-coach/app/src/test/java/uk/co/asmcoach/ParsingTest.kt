@@ -85,4 +85,19 @@ class ParsingTest {
         assertEquals("gemini-3.0-flash", GeminiClient.pickModel(listOf("gemini-2.5-flash", "gemini-3.0-flash", "gemini-3.0-flash-lite", "gemini-3.5-flash-preview")))
         assertNull(GeminiClient.pickModel(listOf("text-embedding-004")))
     }
+
+    @Test
+    fun `question bank is consistent and deep`() {
+        val bank = uk.co.asmcoach.data.content.QuestionBank.all
+        assertEquals(bank.size, bank.map { it.id }.toSet().size)
+        assertEquals(true, bank.size >= 80)
+        assertEquals(true, bank.all { it.category in uk.co.asmcoach.data.model.QuestionCategory.ALL })
+        assertEquals(true, bank.all { it.probes.isNotEmpty() && it.lookingFor.isNotBlank() })
+    }
+
+    @Test
+    fun `detects employer sector from listing text`() {
+        assertEquals(uk.co.asmcoach.data.content.Sector.Housebuilder, uk.co.asmcoach.data.content.QuestionBank.sectorOf("120 plot NHBC development"))
+        assertEquals(uk.co.asmcoach.data.content.Sector.Refurb, uk.co.asmcoach.data.content.QuestionBank.sectorOf("Live school refurbishment"))
+    }
 }
