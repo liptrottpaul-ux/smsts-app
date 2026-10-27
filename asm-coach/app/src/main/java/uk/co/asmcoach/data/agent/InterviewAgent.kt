@@ -3,8 +3,10 @@ package uk.co.asmcoach.data.agent
 import uk.co.asmcoach.data.model.BankQuestion
 import uk.co.asmcoach.data.model.CandidateProfile
 import uk.co.asmcoach.data.model.PanelMember
+import uk.co.asmcoach.data.model.Reaction
 import uk.co.asmcoach.data.model.RoleScenario
 import uk.co.asmcoach.data.model.CrisisScenario
+import uk.co.asmcoach.data.model.DrillScore
 import uk.co.asmcoach.data.model.Evaluation
 import uk.co.asmcoach.data.model.InterviewMode
 import uk.co.asmcoach.data.model.InterviewerTurn
