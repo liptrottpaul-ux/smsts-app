@@ -40,6 +40,17 @@ android {
         buildConfigField("boolean", "FIREBASE_CONFIGURED", hasGoogleServices.toString())
     }
 
+    // A committed debug keystore keeps the signature identical across CI builds, so a new APK
+    // installs as an update instead of failing with "package conflicts". Debug-only; not secret.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
