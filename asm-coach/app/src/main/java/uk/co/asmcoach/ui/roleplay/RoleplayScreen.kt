@@ -68,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -112,6 +113,7 @@ fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit) {
     val target by vm.targetJob.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
     val speaking by vm.speakingId.collectAsStateWithLifecycle()
+    val hasGemini by vm.hasGemini.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -134,8 +136,8 @@ fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
     ) { stage ->
         when (stage) {
-            Stage.Setup -> SetupContent(state, target, history, vm, onOpenSettings, startInterview)
-            Stage.Live -> LiveContent(state, vm)
+            Stage.Setup -> SetupContent(state, target, history, hasGemini, vm, onOpenSettings, startInterview)
+            Stage.Live -> LiveContent(state, hasGemini, vm, onOpenSettings)
             Stage.Evaluating -> EvaluatingContent()
             Stage.Results -> state.evaluation?.let { ResultsContent(it, speaking, vm) }
         }
@@ -149,6 +151,7 @@ private fun SetupContent(
     state: RoleplayUiState,
     target: JobListing?,
     history: List<SessionRecord>,
+    hasGemini: Boolean,
     vm: RoleplayViewModel,
     onOpenSettings: () -> Unit,
     onStart: () -> Unit,
@@ -227,7 +230,17 @@ private fun SetupContent(
 
         item {
             Spacer(Modifier.height(8.dp))
-            PrimaryButton("Start interview", onClick = onStart, icon = Icons.Rounded.Mic, modifier = Modifier.fillMaxWidth())
+            if (!hasGemini) {
+                GeminiKeyCard(onOpenSettings)
+                Spacer(Modifier.height(12.dp))
+            }
+            PrimaryButton(
+                "Start interview",
+                onClick = onStart,
+                enabled = hasGemini,
+                icon = Icons.Rounded.Mic,
+                modifier = Modifier.fillMaxWidth(),
+            )
             if (!vm.voiceInputAvailable) {
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -249,6 +262,31 @@ private fun SetupContent(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Sentinel for the "panel is thinking" state in the question crossfade. */
+private const val THINKING = "\u0000thinking"
+
+@Composable
+private fun GeminiKeyCard(onOpenSettings: () -> Unit) {
+    val c = AsmTheme.colors
+    val uri = LocalUriHandler.current
+    TonalCard(tint = c.tintAmber, contentPadding = 16.dp) {
+        Text("Add your free Gemini key first", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "The interview panel runs on Google Gemini. Create a free key in Google AI Studio " +
+                "(sign in with any Google account), then paste it in Settings.",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.textSecondary,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row {
+            SecondaryButton("Get key", onClick = { uri.openUri("https://aistudio.google.com/apikey") })
+            Spacer(Modifier.width(8.dp))
+            SecondaryButton("Open Settings", onClick = onOpenSettings, icon = Icons.Rounded.Settings)
         }
     }
 }
@@ -338,7 +376,7 @@ private fun HistoryRow(record: SessionRecord) {
 // ---- Live ------------------------------------------------------------------------------------
 
 @Composable
-private fun LiveContent(state: RoleplayUiState, vm: RoleplayViewModel) {
+private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: RoleplayViewModel, onOpenSettings: () -> Unit) {
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val lastQuestion = state.transcript.lastOrNull { it.speaker == Speaker.Interviewer }
@@ -378,16 +416,18 @@ private fun LiveContent(state: RoleplayUiState, vm: RoleplayViewModel) {
                 }
                 Spacer(Modifier.height(18.dp))
                 AnimatedContent(
-                    targetState = if (state.phase == Phase.Thinking) null else lastQuestion?.text,
+                    targetState = if (state.phase == Phase.Thinking) THINKING else lastQuestion?.text,
                     transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
                     label = "question",
                 ) { text ->
-                    if (text == null) {
+                    if (text == THINKING) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
                             Spacer(Modifier.width(10.dp))
                             Text("The panel is conferring…", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
                         }
+                    } else if (text == null) {
+                        Text("Waiting for the panel.", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
                     } else {
                         Text(text, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
                     }
@@ -404,8 +444,12 @@ private fun LiveContent(state: RoleplayUiState, vm: RoleplayViewModel) {
                 ErrorBanner(
                     msg,
                     onDismiss = vm::dismissError,
-                    actionLabel = if (state.phase == Phase.Idle) "Try again" else null,
-                    onAction = vm::retry,
+                    actionLabel = when {
+                        !hasGemini -> "Settings"
+                        state.phase == Phase.Idle -> "Try again"
+                        else -> null
+                    },
+                    onAction = if (!hasGemini) onOpenSettings else vm::retry,
                 )
             }
         }
