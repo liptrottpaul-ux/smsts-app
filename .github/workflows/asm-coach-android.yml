@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: asm-coach
@@ -41,3 +43,21 @@ jobs:
           name: asm-coach-debug-apk
           path: asm-coach/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Rename APK
+        if: github.event_name != 'pull_request'
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/asm-coach.apk
+
+      # A release gives a single, phone-friendly download link for the APK.
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: asm-coach-build-${{ github.run_number }}
+          name: ASM Coach build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: |
+            Debug build of ASM Coach from `${{ github.ref_name }}` (${{ github.sha }}).
+            Download **asm-coach.apk** below on your Android phone and open it to install.
+          files: asm-coach/app/build/outputs/apk/debug/asm-coach.apk
