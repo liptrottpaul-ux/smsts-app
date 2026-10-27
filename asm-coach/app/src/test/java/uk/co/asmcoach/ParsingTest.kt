@@ -8,6 +8,7 @@ import uk.co.asmcoach.data.model.Persona
 import uk.co.asmcoach.data.model.StrategyBrief
 import uk.co.asmcoach.data.remote.AppJson
 import uk.co.asmcoach.data.remote.JsonText
+import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.data.remote.htmlToText
 import uk.co.asmcoach.data.repo.JobRepository
 import uk.co.asmcoach.data.repo.ListingParser
@@ -61,5 +62,11 @@ class ParsingTest {
     fun `strips html from job descriptions`() {
         val text = htmlToText("<p>SMSTS &amp; First Aid</p><ul><li>CSCS</li></ul>Salary &pound;45k")
         assertEquals("SMSTS & First Aid\n• CSCS\nSalary £45k", text)
+    }
+
+    @Test
+    fun `reads build number from release tag`() {
+        assertEquals(9, UpdateChecker.buildNumber("asm-coach-build-9"))
+        assertNull(UpdateChecker.buildNumber("v1.0"))
     }
 }

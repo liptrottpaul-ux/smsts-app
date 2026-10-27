@@ -9,6 +9,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.asmcoach.AppContainer
 
+sealed interface UpdateStatus {
+    data object Idle : UpdateStatus
+    data object Checking : UpdateStatus
+    data object UpToDate : UpdateStatus
+    data class Available(val build: Int) : UpdateStatus
+    data class Failed(val message: String) : UpdateStatus
+}
+
 data class SettingsForm(
     val geminiKey: String = "",
     val reedKey: String = "",
@@ -29,6 +37,20 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     val form: StateFlow<SettingsForm> = _form.asStateFlow()
 
     val cloudSync: Boolean = container.sessions.cloudEnabled
+    val currentBuild: Int = container.updates.currentBuild
+
+    private val _update = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
+    val update: StateFlow<UpdateStatus> = _update.asStateFlow()
+
+    fun checkForUpdates() {
+        _update.value = UpdateStatus.Checking
+        viewModelScope.launch {
+            _update.value = runCatching { container.updates.check() }.fold(
+                { latest -> if (latest > currentBuild) UpdateStatus.Available(latest) else UpdateStatus.UpToDate },
+                { e -> UpdateStatus.Failed(e.message ?: "Couldn't check for updates.") },
+            )
+        }
+    }
 
     init {
         viewModelScope.launch {

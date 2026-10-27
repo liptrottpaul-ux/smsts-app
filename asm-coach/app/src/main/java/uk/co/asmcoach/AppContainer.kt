@@ -17,6 +17,7 @@ import uk.co.asmcoach.data.remote.GeminiClient
 import uk.co.asmcoach.data.remote.Http
 import uk.co.asmcoach.data.remote.ReedClient
 import uk.co.asmcoach.data.remote.SerperClient
+import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.data.repo.JobRepository
 import uk.co.asmcoach.data.settings.SettingsRepository
 import uk.co.asmcoach.voice.TextToSpeechManager
@@ -34,6 +35,7 @@ class AppContainer(val app: Context) {
     val sessions = SessionRepository(app, FirestoreSync.createIfAvailable(app))
     val tts = TextToSpeechManager(app)
     val selection = SelectionStore()
+    val updates = UpdateChecker(http)
 }
 
 /** The job chosen in Tab 1, shared with the strategy screen, masterclasses and the roleplay. */

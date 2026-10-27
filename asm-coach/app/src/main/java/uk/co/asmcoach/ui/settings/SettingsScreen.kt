@@ -25,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
@@ -50,6 +52,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uk.co.asmcoach.AppContainer
+import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.data.settings.SettingsRepository
 import uk.co.asmcoach.ui.components.ChoiceChip
 import uk.co.asmcoach.ui.components.CircleIconButton
@@ -65,6 +68,7 @@ import uk.co.asmcoach.ui.theme.AsmTheme
 fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     val vm = containerViewModel { SettingsViewModel(container) }
     val form by vm.form.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
     val uri = LocalUriHandler.current
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -173,6 +177,48 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = c.textSecondary,
                 )
+            }
+        }
+
+        item { SectionLabel("App updates") }
+        item {
+            SurfaceCard {
+                Text("ASM Coach · build ${vm.currentBuild}", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    when (val u = update) {
+                        UpdateStatus.Idle -> "Check GitHub for a newer build."
+                        UpdateStatus.Checking -> "Checking…"
+                        UpdateStatus.UpToDate -> "You're on the latest build."
+                        is UpdateStatus.Available -> "Build ${u.build} is available."
+                        is UpdateStatus.Failed -> u.message
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (update is UpdateStatus.Available) {
+                    PrimaryButton(
+                        "Download update",
+                        onClick = { uri.openUri(UpdateChecker.DOWNLOAD_URL) },
+                        icon = Icons.Rounded.Download,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "When it finishes, open the downloaded file and choose Update. Your keys stay.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.textSecondary,
+                    )
+                } else {
+                    SecondaryButton(
+                        "Check for updates",
+                        onClick = vm::checkForUpdates,
+                        icon = Icons.Rounded.Refresh,
+                        enabled = update != UpdateStatus.Checking,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
 

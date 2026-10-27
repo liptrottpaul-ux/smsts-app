@@ -33,6 +33,13 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
 
     val briefs = container.selection.briefs
 
+    val updates = container.updates
+
+    init {
+        // Quietly look for a newer build; failures (offline, rate limit) are ignored.
+        viewModelScope.launch { runCatching { container.updates.check() } }
+    }
+
     fun setRegion(region: SearchRegion) = _state.update { it.copy(region = region) }
 
     fun setPastWeekOnly(value: Boolean) = _state.update { it.copy(pastWeekOnly = value) }

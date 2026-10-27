@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Construction
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
@@ -38,6 +39,7 @@ import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.data.model.JobListing
 import uk.co.asmcoach.data.model.SearchRegion
 import uk.co.asmcoach.data.model.StrategyBrief
+import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.ui.components.ChoiceChip
 import uk.co.asmcoach.ui.components.CircleIconButton
 import uk.co.asmcoach.ui.components.EmptyState
@@ -58,6 +60,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
     val state by vm.state.collectAsStateWithLifecycle()
     val hasKey by vm.hasSearchKey.collectAsStateWithLifecycle()
     val briefs by vm.briefs.collectAsStateWithLifecycle()
+    val latestBuild by vm.updates.latestBuild.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
     val uri = LocalUriHandler.current
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -74,6 +77,24 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
                 subtitle = "Live Assistant Site Manager roles across the North West, scored against your profile.",
             ) {
                 CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
+            }
+        }
+
+        if ((latestBuild ?: 0) > vm.updates.currentBuild) {
+            item {
+                TonalCard(tint = c.tintSage, onClick = { uri.openUri(UpdateChecker.DOWNLOAD_URL) }, contentPadding = 14.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Update available · build $latestBuild", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                            Text(
+                                "Tap to download, then open the file and choose Update.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.textSecondary,
+                            )
+                        }
+                        Icon(Icons.Rounded.Download, contentDescription = null, tint = c.good)
+                    }
+                }
             }
         }
 

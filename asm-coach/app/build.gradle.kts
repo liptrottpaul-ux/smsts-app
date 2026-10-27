@@ -30,8 +30,10 @@ android {
         applicationId = "uk.co.asmcoach"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // CI stamps each build with its run number so the in-app updater can compare versions.
+        val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = buildNumber
+        versionName = "1.0.$buildNumber"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"${secret("GEMINI_API_KEY")}\"")
         buildConfigField("String", "REED_API_KEY", "\"${secret("REED_API_KEY")}\"")
