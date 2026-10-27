@@ -1,6 +1,9 @@
 package uk.co.asmcoach.data.agent
 
+import uk.co.asmcoach.data.model.BankQuestion
 import uk.co.asmcoach.data.model.CandidateProfile
+import uk.co.asmcoach.data.model.PanelMember
+import uk.co.asmcoach.data.model.RoleScenario
 import uk.co.asmcoach.data.model.CrisisScenario
 import uk.co.asmcoach.data.model.Evaluation
 import uk.co.asmcoach.data.model.InterviewMode
@@ -18,6 +21,10 @@ data class InterviewConfig(
     val questionCount: Int,
     val job: JobListing?,
     val brief: StrategyBrief?,
+    /** Role-pack panel, scenario and the bank questions that were asked, when interviewing for a real role. */
+    val panel: List<PanelMember> = emptyList(),
+    val roleScenario: RoleScenario? = null,
+    val askedQuestions: List<BankQuestion> = emptyList(),
 )
 
 /** Agent 3: plays the interview panel turn by turn, then scores the whole interview. */
@@ -74,6 +81,11 @@ class InterviewAgent(private val gemini: GeminiClient) {
             appendLine()
             appendLine("FULL TRANSCRIPT")
             appendLine(transcript.render())
+            if (config.askedQuestions.isNotEmpty()) {
+                appendLine()
+                appendLine("WHAT THE PANEL WAS LOOKING FOR")
+                config.askedQuestions.forEach { appendLine("- ${it.question} → ${it.lookingFor}") }
+            }
             appendLine()
             appendLine(EVALUATION_SCHEMA)
         }
@@ -98,7 +110,8 @@ class InterviewAgent(private val gemini: GeminiClient) {
         appendLine(profile.toPromptBlock())
         appendLine()
         appendLine("INTERVIEW MODE: ${config.mode.title}. ${config.mode.focus}")
-        config.scenario?.let { appendLine("LIVE SCENARIO: ${it.title}. ${it.briefing}") }
+        config.roleScenario?.let { appendLine("LIVE SCENARIO: ${it.title}. ${it.briefing}") }
+            ?: config.scenario?.let { appendLine("LIVE SCENARIO: ${it.title}. ${it.briefing}") }
         config.job?.let { job ->
             appendLine("ROLE BEING INTERVIEWED FOR: ${job.title}${job.location?.let { " – $it" } ?: ""}")
             appendLine("Listing summary: ${job.snippet.take(600)}")
@@ -107,12 +120,16 @@ class InterviewAgent(private val gemini: GeminiClient) {
             if (brief.keywords.isNotEmpty()) appendLine("Listing keywords: ${brief.keywords.joinToString()}")
         }
         appendLine("PANEL")
-        config.mode.personas.forEach { appendLine("- ${it.name}: ${it.displayName}, ${it.role}. ${it.brief}") }
+        if (config.panel.isNotEmpty()) {
+            config.panel.forEach { appendLine("- ${it.name}, ${it.role}. Focus: ${it.focus}") }
+        } else {
+            config.mode.personas.forEach { appendLine("- ${it.name}: ${it.displayName}, ${it.role}. ${it.brief}") }
+        }
     }
 
     private fun List<Turn>.render(): String = joinToString("\n") { turn ->
         when (turn.speaker) {
-            Speaker.Interviewer -> "${turn.persona?.role ?: "Interviewer"}: ${turn.text}"
+            Speaker.Interviewer -> "${turn.speakerRole ?: "Interviewer"}: ${turn.text}"
             Speaker.Candidate -> "Candidate: ${turn.text}"
         }
     }

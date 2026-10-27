@@ -110,7 +110,13 @@ data class Turn(
     val speaker: Speaker,
     val text: String,
     val persona: Persona? = null,
-)
+    /** Display name and job title when the panel comes from a role pack. */
+    val name: String? = null,
+    val role: String? = null,
+) {
+    val speakerName: String? get() = name ?: persona?.displayName
+    val speakerRole: String? get() = role ?: persona?.role
+}
 
 /** The interviewer agent's structured reply for each turn. */
 @Serializable

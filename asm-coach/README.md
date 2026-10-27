@@ -4,11 +4,13 @@ An Android app (Kotlin, Jetpack Compose) that prepares a returning candidate for
 Manager** roles in UK construction. It is built around a 30-minute daily routine and runs entirely
 on free tiers.
 
+The app is built around one flow: **find a real role → prepare for that role → interview for that role.**
+
 | Minutes | Tab | What it does |
 |---|---|---|
-| 0–5 | **Jobs** | Searches live ASM listings in the North West (Reed's official API, or Serper/Firecrawl web search across Reed, Indeed, Totaljobs and CV-Library), scores fit against the master profile, and writes a *Why You Win* brief plus a 30-60-90 day site management plan. |
-| 5–15 | **Prep** | Four masterclasses (Narrative Pitch, Digital Site Tools, Technical Trade QA, Crisis Management) in accordion cards with read-aloud boxes, plus an AI coach that rewrites each lesson in your own words. |
-| 15–30 | **Roleplay** | A live voice interview with three fictional panel personas across four modes, including crisis simulations. It ends with a readiness score out of 100, a STAR critique and *Better Answers You Should Have Used* scripts. |
+| 0–5 | **Jobs** | Searches live ASM vacancies in the North West (Serper, Firecrawl or Reed). Tapping a role *prepares* it once: the full listing is read, then a strategy brief (fit score, *Why You Win*, 30-60-90 plan) and a **role pack** are generated in parallel and saved on the device. |
+| 5–15 | **Prep** | Opens on the selected role: what the employer needs, prep topics drawn from the listing, and the questions this panel is likely to ask, each with what they're looking for and a model answer to listen to. Generic core-skills masterclasses sit below. |
+| 15–30 | **Roleplay** | A voice interview for that role, with the role pack's panel (job titles that fit the employer), its question bank and its project-specific crisis scenarios. Questions are pre-written, so each one starts instantly. Gemini is called once at the end for the readiness score out of 100, the STAR critique and *Better Answers You Should Have Used*. |
 
 ## Free stack
 
@@ -23,11 +25,12 @@ on free tiers.
 > **Model note:** Google has retired Gemini 1.5 Flash, so the default model is `gemini-2.5-flash`,
 > its free-tier successor. You can change the model in Settings.
 
-## The three agents
+## The agents
 
 1. **Strategy agent** (`data/agent/StrategyAgent.kt`): scores the listing against the profile and writes the strengths, gaps, *Why You Win* brief, elevator pitch, 30-60-90 plan, questions to ask and keywords.
-2. **Coach agent** (`data/agent/CoachAgent.kt`): turns a masterclass lesson into a speakable talking point grounded in the candidate's real history.
-3. **Interview agent** (`data/agent/InterviewAgent.kt`): plays the panel turn by turn (probing weak answers and escalating crises), then evaluates the full transcript.
+2. **Role pack agent** (`data/agent/RolePackAgent.kt`): writes the role-specific panel, prep topics, question bank (with what each question is looking for and a model answer) and crisis scenarios. Stored by `data/repo/RoleRepository.kt`.
+3. **Interview agent** (`data/agent/InterviewAgent.kt`): evaluates the transcript against what the panel was looking for. Without a prepared role, it also plays a general panel turn by turn.
+4. **Coach agent** (`data/agent/CoachAgent.kt`): personalises the generic core-skills lessons.
 
 Every prompt includes the master profile (`data/model/CandidateProfile.kt`) and an instruction not to invent experience.
 

@@ -109,8 +109,17 @@ fun AsmCoachRoot(container: AppContainer) {
                     onOpenSettings = openSettings,
                 )
             }
-            composable(Tab.Prep.route) { PrepScreen(container, onOpenSettings = openSettings) }
-            composable(Tab.Roleplay.route) { RoleplayScreen(container, onOpenSettings = openSettings) }
+            composable(Tab.Prep.route) {
+                PrepScreen(
+                    container,
+                    onOpenSettings = openSettings,
+                    onOpenJobs = { nav.switchTab(Tab.Jobs.route) },
+                    onInterview = { nav.switchTab(Tab.Roleplay.route) },
+                )
+            }
+            composable(Tab.Roleplay.route) {
+                RoleplayScreen(container, onOpenSettings = openSettings, onOpenJobs = { nav.switchTab(Tab.Jobs.route) })
+            }
             composable(
                 Routes.STRATEGY,
                 enterTransition = { slideInHorizontally { it } + fadeIn() },
@@ -119,6 +128,7 @@ fun AsmCoachRoot(container: AppContainer) {
                 StrategyScreen(
                     container = container,
                     onBack = { nav.popBackStack() },
+                    onPrep = { nav.switchTab(Tab.Prep.route) },
                     onPractise = { nav.switchTab(Tab.Roleplay.route) },
                 )
             }

@@ -1,6 +1,15 @@
 package uk.co.asmcoach.ui.prep
 
 import androidx.compose.foundation.layout.Arrangement
+import uk.co.asmcoach.ui.components.SectionLabel
+import uk.co.asmcoach.ui.components.PrimaryButton
+import uk.co.asmcoach.ui.components.TonalCard
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,14 +58,18 @@ import uk.co.asmcoach.ui.containerViewModel
 import uk.co.asmcoach.ui.theme.AsmTheme
 
 @Composable
-fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit) {
+fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: () -> Unit, onInterview: () -> Unit) {
     val vm = containerViewModel { PrepViewModel(container) }
     val state by vm.state.collectAsStateWithLifecycle()
     val speaking by vm.speakingId.collectAsStateWithLifecycle()
     val target by vm.targetJob.collectAsStateWithLifecycle()
+    val packs by vm.packs.collectAsStateWithLifecycle()
+    val progressMap by vm.progress.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val totalLessons = vm.modules.sumOf { it.lessons.size }
+    val job = target
+    val pack = job?.let { packs[it.id] }
+    val progress = job?.let { progressMap[it.id] }
 
     DisposableEffect(Unit) { onDispose { vm.stopSpeaking() } }
 
@@ -67,25 +80,118 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit) {
     ) {
         item {
             LargeTitleHeader(
-                eyebrow = "Minutes 5–15 · Masterclass",
-                title = "Technical prep",
-                subtitle = target?.let { "Tailored to ${it.title}" } ?: "Four focused modules. Read, listen, then say it back.",
+                eyebrow = "Minutes 5–15 · Role prep",
+                title = "Prep",
+                subtitle = job?.let { listOfNotNull(it.title, it.company, it.location).joinToString(" · ") }
+                    ?: "Pick a role on the Jobs tab and your prep is built for it.",
             ) {
                 CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
             }
         }
-        item {
-            SurfaceCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Today's listening", style = MaterialTheme.typography.titleSmall, color = c.textPrimary, modifier = Modifier.weight(1f))
-                    Text("${state.completed.size} / $totalLessons", style = MaterialTheme.typography.labelLarge, color = c.textSecondary)
-                }
-                Spacer(Modifier.height(10.dp))
-                MeterBar(state.completed.size / totalLessons.toFloat(), c.accent)
-            }
-        }
         state.error?.let { msg -> item { ErrorBanner(msg, onDismiss = vm::dismissError) } }
 
+        when {
+            job == null -> item {
+                TonalCard(tint = c.tintAmber) {
+                    Text("No role selected yet", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Search live jobs, tap a role, and the app writes prep and an interview specific to it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.textSecondary,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    SecondaryButton("Find a role", onClick = onOpenJobs, icon = Icons.Rounded.Search)
+                }
+            }
+            pack == null -> item {
+                TonalCard(tint = c.tintAmber) {
+                    if (progress?.running == true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = c.accent, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(progress?.stage.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+                        }
+                    } else {
+                        Text("Prep for this role isn't built yet", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                        progress?.error?.let {
+                            Spacer(Modifier.height(4.dp))
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = c.bad)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        PrimaryButton("Prepare this role", onClick = vm::prepareRole, icon = Icons.Rounded.AutoAwesome)
+                    }
+                }
+            }
+            else -> {
+                if (pack.roleSummary.isNotBlank()) {
+                    item {
+                        TonalCard(tint = c.tintSlate) {
+                            Text("What this role needs", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                            Spacer(Modifier.height(4.dp))
+                            Text(pack.roleSummary, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+                        }
+                    }
+                }
+                item { SectionLabel("Prep topics for this role") }
+                itemsIndexed(pack.prepTopics) { i, topic ->
+                    val id = "topic-$i"
+                    AccordionCard(
+                        title = topic.title,
+                        subtitle = topic.whyItMatters.takeIf { it.isNotBlank() },
+                        expanded = id in state.expandedLessons,
+                        onToggle = { vm.toggleLesson(id) },
+                        tint = c.tintSage,
+                    ) {
+                        Bullets(topic.points)
+                        if (topic.sayThis.isNotBlank()) {
+                            Spacer(Modifier.height(14.dp))
+                            ReadAloudBox(
+                                text = topic.sayThis,
+                                speaking = speaking == "$id:say",
+                                onToggle = { vm.toggleSpeak("$id:say", topic.sayThis) },
+                            )
+                        }
+                    }
+                }
+                item { SectionLabel("Questions this panel is likely to ask") }
+                itemsIndexed(pack.questions) { i, q ->
+                    val id = "q-$i"
+                    AccordionCard(
+                        title = q.question,
+                        subtitle = listOfNotNull(q.category.takeIf { it.isNotBlank() }, pack.panel.getOrNull(q.askedBy)?.role)
+                            .joinToString(" · ")
+                            .ifBlank { null },
+                        expanded = id in state.expandedLessons,
+                        onToggle = { vm.toggleLesson(id) },
+                    ) {
+                        if (q.lookingFor.isNotBlank()) {
+                            Text("They're looking for", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                            Spacer(Modifier.height(2.dp))
+                            Text(q.lookingFor, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        ReadAloudBox(
+                            text = q.modelAnswer,
+                            speaking = speaking == "$id:answer",
+                            onToggle = { vm.toggleSpeak("$id:answer", q.modelAnswer) },
+                            label = "A strong answer from you",
+                        )
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(4.dp))
+                    PrimaryButton(
+                        "Interview for this role",
+                        onClick = onInterview,
+                        icon = Icons.Rounded.Mic,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
+        item { SectionLabel("Core skills · any ASM role") }
         items(vm.modules, key = { it.id }) { module ->
             AccordionCard(
                 title = module.title,

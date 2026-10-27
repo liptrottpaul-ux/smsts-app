@@ -60,6 +60,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
     val state by vm.state.collectAsStateWithLifecycle()
     val hasKey by vm.hasSearchKey.collectAsStateWithLifecycle()
     val briefs by vm.briefs.collectAsStateWithLifecycle()
+    val packs by vm.packs.collectAsStateWithLifecycle()
     val latestBuild by vm.updates.latestBuild.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
     val uri = LocalUriHandler.current
@@ -74,7 +75,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
             LargeTitleHeader(
                 eyebrow = "Minutes 0–5 · Strategy",
                 title = "Find your role",
-                subtitle = "Live Assistant Site Manager roles across the North West, scored against your profile.",
+                subtitle = "Pick a real role. The app prepares you for it, then interviews you for it.",
             ) {
                 CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
             }
@@ -175,7 +176,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
         } else if (state.jobs.isNotEmpty()) {
             item { SectionLabel("${state.jobs.size} roles") }
             items(state.jobs, key = { it.id }) { job ->
-                JobCard(job, briefs[job.id]) {
+                JobCard(job, briefs[job.id], ready = job.id in packs) {
                     if (job.isSearchPage) {
                         uri.openUri(job.url)
                     } else {
@@ -189,7 +190,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
 }
 
 @Composable
-private fun JobCard(job: JobListing, brief: StrategyBrief?, onClick: () -> Unit) {
+private fun JobCard(job: JobListing, brief: StrategyBrief?, ready: Boolean, onClick: () -> Unit) {
     val c = AsmTheme.colors
     TonalCard(tint = c.surface, border = !c.isDark, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -231,7 +232,11 @@ private fun JobCard(job: JobListing, brief: StrategyBrief?, onClick: () -> Unit)
             }
             Spacer(Modifier.weight(1f))
             Text(
-                if (job.isSearchPage) "Open on ${job.source}" else "Build strategy",
+                when {
+                    job.isSearchPage -> "Open on ${job.source}"
+                    ready -> "Open role · ready"
+                    else -> "Prepare for this role"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = c.accent,
             )

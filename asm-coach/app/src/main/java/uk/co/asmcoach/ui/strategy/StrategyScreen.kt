@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Refresh
@@ -63,7 +64,7 @@ import uk.co.asmcoach.ui.containerViewModel
 import uk.co.asmcoach.ui.theme.AsmTheme
 
 @Composable
-fun StrategyScreen(container: AppContainer, onBack: () -> Unit, onPractise: () -> Unit) {
+fun StrategyScreen(container: AppContainer, onBack: () -> Unit, onPrep: () -> Unit, onPractise: () -> Unit) {
     val vm = containerViewModel { StrategyViewModel(container) }
     val state by vm.state.collectAsStateWithLifecycle()
     val speaking by vm.speakingId.collectAsStateWithLifecycle()
@@ -111,25 +112,51 @@ fun StrategyScreen(container: AppContainer, onBack: () -> Unit, onPractise: () -
                 if (stage != null) LoadingCard(stage)
             }
         }
+        if (state.pack != null) {
+            item { NextStepsCard(state.pack!!.roleSummary, onPrep, onPractise) }
+        }
         state.brief?.let { brief ->
             briefContent(brief, speaking, vm::toggleSpeak)
             item {
                 Spacer(Modifier.height(8.dp))
-                PrimaryButton(
-                    "Practise the interview for this role",
-                    onClick = onPractise,
-                    icon = Icons.Rounded.Mic,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(10.dp))
+                if (state.pack != null) {
+                    PrimaryButton(
+                        "Interview for this role",
+                        onClick = onPractise,
+                        icon = Icons.Rounded.Mic,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
                 SecondaryButton(
-                    "Regenerate brief",
-                    onClick = vm::generate,
+                    "Rebuild everything for this role",
+                    onClick = vm::regenerate,
                     icon = Icons.Rounded.Refresh,
                     enabled = state.stage == null,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun NextStepsCard(summary: String, onPrep: () -> Unit, onPractise: () -> Unit) {
+    val c = AsmTheme.colors
+    TonalCard(tint = c.tintSage) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.CheckCircle, null, tint = c.good, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Prep and interview ready for this role", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+        }
+        if (summary.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(summary, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SecondaryButton("Prep", onClick = onPrep, icon = Icons.Rounded.AutoStories, modifier = Modifier.weight(1f))
+            PrimaryButton("Interview", onClick = onPractise, icon = Icons.Rounded.Mic, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -142,8 +169,13 @@ private fun LoadingCard(stage: String) {
             CircularProgressIndicator(Modifier.size(22.dp), color = c.accent, strokeWidth = 2.5.dp)
             Spacer(Modifier.width(14.dp))
             Column {
-                Text("Strategy agent at work", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                Text("Preparing this role", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
                 Text(stage, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                Text(
+                    "About 30–60 seconds, once per role. You can leave this screen; it keeps going.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textTertiary,
+                )
             }
         }
     }

@@ -31,7 +31,8 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
         .map { it.hasJobSearch }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
-    val briefs = container.selection.briefs
+    val briefs = container.roles.briefs
+    val packs = container.roles.packs
 
     val updates = container.updates
 
@@ -59,7 +60,7 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
         it.copy(jobs = uk.co.asmcoach.data.repo.JobRepository.samples, searched = true, error = null)
     }
 
-    fun select(job: JobListing) = container.selection.select(job)
+    fun select(job: JobListing) = container.roles.select(job)
 
     fun dismissError() = _state.update { it.copy(error = null) }
 }

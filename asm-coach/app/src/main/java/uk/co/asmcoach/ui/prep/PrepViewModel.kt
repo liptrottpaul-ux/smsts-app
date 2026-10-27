@@ -13,7 +13,7 @@ import uk.co.asmcoach.data.model.Lesson
 import uk.co.asmcoach.data.model.Masterclass
 
 data class PrepUiState(
-    val expandedModule: String? = MasterclassContent.modules.first().id,
+    val expandedModule: String? = null,
     val expandedLessons: Set<String> = emptySet(),
     val completed: Set<String> = emptySet(),
     val personalised: Map<String, String> = emptyMap(),
@@ -24,7 +24,14 @@ data class PrepUiState(
 class PrepViewModel(private val container: AppContainer) : ViewModel() {
     val modules: List<Masterclass> = MasterclassContent.modules
     val speakingId = container.tts.speakingId
-    val targetJob = container.selection.job
+    val targetJob = container.roles.job
+    val packs = container.roles.packs
+    val progress = container.roles.progress
+
+    /** Builds the role pack for the selected job if it isn't ready yet. */
+    fun prepareRole() {
+        targetJob.value?.let { container.roles.prepare(it) }
+    }
 
     private val _state = MutableStateFlow(PrepUiState())
     val state: StateFlow<PrepUiState> = _state.asStateFlow()

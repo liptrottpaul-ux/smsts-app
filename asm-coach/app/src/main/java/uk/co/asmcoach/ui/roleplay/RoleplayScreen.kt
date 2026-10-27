@@ -36,6 +36,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import uk.co.asmcoach.data.repo.PrepProgress
+import uk.co.asmcoach.data.model.RolePack
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -107,13 +112,15 @@ import java.util.Date
 private val lengths = listOf(3 to "Quick · 3", 5 to "Standard · 5", 8 to "Full · 8")
 
 @Composable
-fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit) {
+fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: () -> Unit) {
     val vm = containerViewModel { RoleplayViewModel(container) }
     val state by vm.state.collectAsStateWithLifecycle()
     val target by vm.targetJob.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
     val speaking by vm.speakingId.collectAsStateWithLifecycle()
     val hasGemini by vm.hasGemini.collectAsStateWithLifecycle()
+    val pack by vm.pack.collectAsStateWithLifecycle()
+    val progressMap by vm.prepProgress.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -136,7 +143,9 @@ fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
     ) { stage ->
         when (stage) {
-            Stage.Setup -> SetupContent(state, target, history, hasGemini, vm, onOpenSettings, startInterview)
+            Stage.Setup -> SetupContent(
+                state, target, pack, target?.let { progressMap[it.id] }, history, hasGemini, vm, onOpenSettings, onOpenJobs, startInterview,
+            )
             Stage.Live -> LiveContent(state, hasGemini, vm, onOpenSettings)
             Stage.Evaluating -> EvaluatingContent()
             Stage.Results -> state.evaluation?.let { ResultsContent(it, speaking, vm) }
@@ -150,12 +159,16 @@ fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit) {
 private fun SetupContent(
     state: RoleplayUiState,
     target: JobListing?,
+    pack: RolePack?,
+    progress: PrepProgress?,
     history: List<SessionRecord>,
     hasGemini: Boolean,
     vm: RoleplayViewModel,
     onOpenSettings: () -> Unit,
+    onOpenJobs: () -> Unit,
     onStart: () -> Unit,
 ) {
+    val usePack = pack != null && state.tailorToJob
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     LazyColumn(
@@ -167,30 +180,14 @@ private fun SetupContent(
             LargeTitleHeader(
                 eyebrow = "Minutes 15–30 · Live voice",
                 title = "Roleplay",
-                subtitle = "Answer out loud. The panel listens, probes and scores you.",
+                subtitle = "An interview for the role you picked, with that employer's kind of panel.",
             ) {
                 CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
             }
         }
         state.error?.let { msg -> item { ErrorBanner(msg, onDismiss = vm::dismissError) } }
 
-        if (target != null) {
-            item {
-                SurfaceCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Tailor to selected role", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
-                            Text(target.title, style = MaterialTheme.typography.bodySmall, color = c.textSecondary, maxLines = 1)
-                        }
-                        Switch(
-                            checked = state.tailorToJob,
-                            onCheckedChange = vm::setTailor,
-                            colors = SwitchDefaults.colors(checkedTrackColor = c.good, checkedThumbColor = c.surface),
-                        )
-                    }
-                }
-            }
-        }
+        item { RoleCard(target, pack, progress, state.tailorToJob, vm, onOpenJobs) }
 
         item { SectionLabel("Mode") }
         items(InterviewMode.entries) { mode ->
@@ -200,14 +197,25 @@ private fun SetupContent(
         if (state.mode == InterviewMode.CrisisSimulation) {
             item {
                 SectionLabel("Scenario")
+                val roleScenarios = pack?.scenarios.orEmpty().takeIf { usePack }.orEmpty()
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(CrisisScenario.entries) { scenario ->
-                        ChoiceChip(scenario.title, scenario == state.scenario) { vm.setScenario(scenario) }
+                    if (roleScenarios.isNotEmpty()) {
+                        itemsIndexed(roleScenarios) { i, sc ->
+                            ChoiceChip(sc.title, i == state.roleScenarioIndex) { vm.setRoleScenario(i) }
+                        }
+                    } else {
+                        items(CrisisScenario.entries) { scenario ->
+                            ChoiceChip(scenario.title, scenario == state.scenario) { vm.setScenario(scenario) }
+                        }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 TonalCard(tint = c.tintRose) {
-                    Text(state.scenario.briefing, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+                    Text(
+                        roleScenarios.getOrNull(state.roleScenarioIndex)?.briefing ?: state.scenario.briefing,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.textPrimary,
+                    )
                 }
             }
         }
@@ -222,9 +230,12 @@ private fun SetupContent(
         }
 
         item {
-            SectionLabel("Your panel")
+            SectionLabel(if (usePack) "Your panel for this role" else "Your panel")
+            val seats = pack?.panel?.takeIf { usePack && it.isNotEmpty() }
+                ?.mapIndexed { i, m -> Seat(m.name, m.role, Persona.entries[i % Persona.entries.size]) }
+                ?: state.mode.personas.map { Seat(it.displayName, it.role, it) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                state.mode.personas.forEach { PersonaMini(it, Modifier.weight(1f)) }
+                seats.forEach { SeatMini(it, Modifier.weight(1f)) }
             }
         }
 
@@ -323,9 +334,77 @@ private fun ModeCard(mode: InterviewMode, selected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun PersonaAvatar(persona: Persona, size: Int = 44, active: Boolean = false) {
+private fun RoleCard(
+    target: JobListing?,
+    pack: RolePack?,
+    progress: PrepProgress?,
+    tailor: Boolean,
+    vm: RoleplayViewModel,
+    onOpenJobs: () -> Unit,
+) {
     val c = AsmTheme.colors
-    val color = when (persona) {
+    if (target == null) {
+        TonalCard(tint = c.tintAmber) {
+            Text("Pick a real role first", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Choose a job on the Jobs tab and this interview is built for it: its panel, its questions, its scenarios. " +
+                    "Without one you get a general ASM interview.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+            )
+            Spacer(Modifier.height(12.dp))
+            SecondaryButton("Find a role", onClick = onOpenJobs, icon = Icons.Rounded.Search)
+        }
+        return
+    }
+    TonalCard(tint = if (pack != null) c.tintSage else c.tintAmber) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Interviewing for", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                Text(target.title, style = MaterialTheme.typography.titleSmall, color = c.textPrimary, maxLines = 2)
+                listOfNotNull(target.company, target.location).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                }
+            }
+            if (pack != null) {
+                Switch(
+                    checked = tailor,
+                    onCheckedChange = vm::setTailor,
+                    colors = SwitchDefaults.colors(checkedTrackColor = c.good, checkedThumbColor = c.surface),
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        when {
+            pack != null -> Text(
+                if (tailor) "Ready: ${pack.questions.size} role questions, ${pack.scenarios.size} scenarios. Questions start instantly."
+                else "Role questions off: general ASM interview.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textSecondary,
+            )
+            progress?.running == true -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = c.accent, strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(progress?.stage.orEmpty(), style = MaterialTheme.typography.bodySmall, color = c.textPrimary)
+            }
+            else -> {
+                Text(
+                    progress?.error ?: "Build this role's panel and questions first (about 30–60 seconds, once).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (progress?.error != null) c.bad else c.textSecondary,
+                )
+                Spacer(Modifier.height(10.dp))
+                SecondaryButton("Prepare this role", onClick = vm::prepareRole, icon = Icons.Rounded.AutoAwesome)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeatAvatar(seat: Seat, size: Int = 44, active: Boolean = false) {
+    val c = AsmTheme.colors
+    val color = when (seat.voice) {
         Persona.ProjectDirector -> c.slate
         Persona.CommercialManager -> c.accent
         Persona.SafetyAuditor -> c.good
@@ -338,7 +417,7 @@ private fun PersonaAvatar(persona: Persona, size: Int = 44, active: Boolean = fa
         }
         Box(Modifier.size(size.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
             Text(
-                persona.displayName.split(" ").joinToString("") { it.take(1) },
+                seat.initials,
                 style = if (size > 50) MaterialTheme.typography.titleLarge else MaterialTheme.typography.labelLarge,
                 color = c.background,
             )
@@ -347,13 +426,13 @@ private fun PersonaAvatar(persona: Persona, size: Int = 44, active: Boolean = fa
 }
 
 @Composable
-private fun PersonaMini(persona: Persona, modifier: Modifier = Modifier) {
+private fun SeatMini(seat: Seat, modifier: Modifier = Modifier) {
     val c = AsmTheme.colors
     SurfaceCard(modifier = modifier, contentPadding = 12.dp) {
-        PersonaAvatar(persona, size = 36)
+        SeatAvatar(seat, size = 36)
         Spacer(Modifier.height(8.dp))
-        Text(persona.displayName, style = MaterialTheme.typography.titleSmall, color = c.textPrimary, maxLines = 1)
-        Text(persona.role, style = MaterialTheme.typography.bodySmall, color = c.textSecondary, maxLines = 2)
+        Text(seat.name, style = MaterialTheme.typography.titleSmall, color = c.textPrimary, maxLines = 1)
+        Text(seat.role, style = MaterialTheme.typography.bodySmall, color = c.textSecondary, maxLines = 2)
     }
 }
 
@@ -380,7 +459,7 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val lastQuestion = state.transcript.lastOrNull { it.speaker == Speaker.Interviewer }
-    val persona = state.activePersona ?: state.mode.personas.first()
+    val seat = state.activeSeat ?: state.seats.firstOrNull() ?: state.mode.personas.first().let { Seat(it.displayName, it.role, it) }
     var showTranscript by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
@@ -390,7 +469,7 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                PillBadge("Question ${(state.answered + 1).coerceAtMost(state.questionCount)} of ${state.questionCount}")
+                PillBadge("Question ${(state.answered + 1).coerceAtMost(state.total)} of ${state.total}")
                 Spacer(Modifier.weight(1f))
                 if (state.phase == Phase.Paused) {
                     CircleIconButton(Icons.Rounded.PlayArrow, "Resume", vm::resume)
@@ -401,17 +480,17 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
                 CircleIconButton(Icons.Rounded.Close, "End and score", vm::endEarly)
             }
             Spacer(Modifier.height(10.dp))
-            MeterBar(state.answered / state.questionCount.toFloat(), c.accent)
+            MeterBar(state.answered / state.total.coerceAtLeast(1).toFloat(), c.accent)
         }
 
         item {
             TonalCard(tint = c.surface, border = !c.isDark, contentPadding = 22.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PersonaAvatar(persona, size = 56, active = state.phase == Phase.Speaking)
+                    SeatAvatar(seat, size = 56, active = state.phase == Phase.Speaking)
                     Spacer(Modifier.width(14.dp))
                     Column {
-                        Text(persona.displayName, style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-                        Text(persona.role, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                        Text(seat.name, style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                        Text(seat.role, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
                     }
                 }
                 Spacer(Modifier.height(18.dp))
@@ -478,7 +557,7 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
                     val mine = turn.speaker == Speaker.Candidate
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                         Text(
-                            if (mine) "You" else turn.persona?.displayName ?: "Panel",
+                            if (mine) "You" else turn.speakerName ?: "Panel",
                             style = MaterialTheme.typography.labelMedium,
                             color = c.textTertiary,
                         )
