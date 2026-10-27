@@ -69,6 +69,10 @@ class SettingsRepository(private val context: Context) {
         return fresh
     }
 
+    suspend fun setModel(model: String) {
+        context.settingsStore.edit { it[Keys.model] = model }
+    }
+
     suspend fun update(
         geminiKey: String,
         reedKey: String,
@@ -93,10 +97,10 @@ class SettingsRepository(private val context: Context) {
 
     companion object {
         /**
-         * Gemini 1.5 Flash has been retired by Google, so the default is its free-tier successor.
-         * Any model id can be set in Settings.
+         * Google retires model versions, so the default is the rolling free-tier Flash alias.
+         * If a saved model disappears, GeminiClient discovers a working one automatically.
          */
-        const val DEFAULT_MODEL = "gemini-2.5-flash"
-        val SUGGESTED_MODELS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash")
+        const val DEFAULT_MODEL = "gemini-flash-latest"
+        val SUGGESTED_MODELS = listOf("gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash")
     }
 }

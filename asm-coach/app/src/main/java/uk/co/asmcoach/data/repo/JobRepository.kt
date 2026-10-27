@@ -88,7 +88,10 @@ class JobRepository(
         "\"Assistant Site Manager\" ${region.query} " +
             "(site:reed.co.uk OR site:uk.indeed.com OR site:totaljobs.com OR site:cv-library.co.uk)"
 
-    private fun List<RawHit>.toListings() = mapNotNull { it.toListing() }.distinctBy { it.url }
+    /** Single vacancies first; board search pages are kept (labelled) so results are never empty. */
+    private fun List<RawHit>.toListings() = mapNotNull { it.toListing() }
+        .distinctBy { it.url }
+        .sortedBy { it.isSearchPage }
 
     private data class RawHit(val title: String, val link: String, val snippet: String, val date: String?)
 
@@ -110,6 +113,7 @@ class JobRepository(
             location = ListingParser.location(text),
             salary = ListingParser.salary(text),
             postedLabel = date,
+            isSearchPage = !ListingParser.isSingleVacancy(link),
         )
     }
 
@@ -193,6 +197,18 @@ object ListingParser {
     )
     private val salaryRegex =
         Regex("£\\s?\\d[\\d,.]*k?(?:\\s*(?:-|–|to)\\s*£?\\s?\\d[\\d,.]*k?)?(?:\\s*(?:per annum|a year|p\\.?a\\.?))?", RegexOption.IGNORE_CASE)
+
+    /** True for a single job advert URL; false for a board's search or category page. */
+    fun isSingleVacancy(url: String): Boolean {
+        val u = url.lowercase()
+        return when {
+            "indeed." in u -> "viewjob" in u || "jk=" in u || "/rc/clk" in u || "/pagead/" in u
+            "reed.co.uk" in u -> Regex("/jobs/[^/?#]+/\\d{6,}").containsMatchIn(u)
+            "totaljobs.com" in u -> Regex("/job/.+job\\d+").containsMatchIn(u)
+            "cv-library.co.uk" in u -> Regex("/job/\\d+").containsMatchIn(u)
+            else -> true
+        }
+    }
 
     fun salary(text: String): String? = salaryRegex.find(text)?.value?.trim()
 

@@ -15,6 +15,8 @@ data class JobListing(
     val postedLabel: String? = null,
     val isSample: Boolean = false,
     val reedJobId: Long? = null,
+    /** A job board's results page rather than a single vacancy: opened in the browser. */
+    val isSearchPage: Boolean = false,
 )
 
 /** [towns] are searched individually (with a radius) on Reed; [query] is used for web search. */

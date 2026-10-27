@@ -7,6 +7,7 @@ import uk.co.asmcoach.data.model.Evaluation
 import uk.co.asmcoach.data.model.Persona
 import uk.co.asmcoach.data.model.StrategyBrief
 import uk.co.asmcoach.data.remote.AppJson
+import uk.co.asmcoach.data.remote.GeminiClient
 import uk.co.asmcoach.data.remote.JsonText
 import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.data.remote.htmlToText
@@ -68,5 +69,20 @@ class ParsingTest {
     fun `reads build number from release tag`() {
         assertEquals(9, UpdateChecker.buildNumber("asm-coach-build-9"))
         assertNull(UpdateChecker.buildNumber("v1.0"))
+    }
+
+    @Test
+    fun `separates single vacancies from search pages`() {
+        assertEquals(true, ListingParser.isSingleVacancy("https://uk.indeed.com/viewjob?jk=abc123"))
+        assertEquals(false, ListingParser.isSingleVacancy("https://uk.indeed.com/q-assistant-site-manager-l-liverpool-jobs.html"))
+        assertEquals(true, ListingParser.isSingleVacancy("https://www.reed.co.uk/jobs/assistant-site-manager/54123456"))
+        assertEquals(false, ListingParser.isSingleVacancy("https://www.reed.co.uk/jobs/assistant-site-manager-jobs-in-manchester"))
+    }
+
+    @Test
+    fun `picks a usable gemini model`() {
+        assertEquals("gemini-flash-latest", GeminiClient.pickModel(listOf("gemini-2.5-flash", "gemini-flash-latest")))
+        assertEquals("gemini-3.0-flash", GeminiClient.pickModel(listOf("gemini-2.5-flash", "gemini-3.0-flash", "gemini-3.0-flash-lite", "gemini-3.5-flash-preview")))
+        assertNull(GeminiClient.pickModel(listOf("text-embedding-004")))
     }
 }

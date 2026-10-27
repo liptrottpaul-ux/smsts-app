@@ -43,6 +43,12 @@ data class GeminiCandidate(val content: GeminiContent? = null, val finishReason:
 data class PromptFeedback(val blockReason: String? = null)
 
 @Serializable
+data class GeminiModelList(val models: List<GeminiModelInfo> = emptyList())
+
+@Serializable
+data class GeminiModelInfo(val name: String = "", val supportedGenerationMethods: List<String> = emptyList())
+
+@Serializable
 data class GeminiErrorEnvelope(val error: GeminiError? = null)
 
 @Serializable
@@ -93,7 +99,29 @@ class GeminiClient(
         if (!s.hasGemini) {
             throw RemoteException("Add your free Gemini API key in Settings to use the AI coach.")
         }
-        val model = s.geminiModel
+        val (code, body, model) = send(s.geminiKey, s.geminiModel, system, prompt, temperature, jsonMode, fast)
+            .let { first ->
+                if (first.first != 404) return@let Triple(first.first, first.second, s.geminiModel)
+                // Google retires model versions; find one this key can use, remember it, retry once.
+                val replacement = discoverModel(s.geminiKey)
+                    ?: return@let Triple(first.first, first.second, s.geminiModel)
+                settings.setModel(replacement)
+                val retry = send(s.geminiKey, replacement, system, prompt, temperature, jsonMode, fast)
+                Triple(retry.first, retry.second, replacement)
+            }
+        if (code !in 200..299) throw RemoteException(describeError(code, body, model))
+        return parse(body)
+    }
+
+    private suspend fun send(
+        key: String,
+        model: String,
+        system: String,
+        prompt: String,
+        temperature: Float,
+        jsonMode: Boolean,
+        fast: Boolean,
+    ): Pair<Int, String> {
         val request = GeminiRequest(
             systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = system))),
             contents = listOf(GeminiContent(role = "user", parts = listOf(GeminiPart(text = prompt)))),
@@ -104,15 +132,32 @@ class GeminiClient(
                 thinkingConfig = if (fast && model.contains("2.5-flash")) ThinkingConfig(0) else null,
             ),
         )
-        val (code, body) = Http.postJson(
+        return Http.postJson(
             client = http,
             url = "$BASE_URL/models/$model:generateContent",
             body = json.encodeToString(GeminiRequest.serializer(), request),
-            headers = mapOf("x-goog-api-key" to s.geminiKey),
+            headers = mapOf("x-goog-api-key" to key),
             serviceName = "Gemini",
         )
-        if (code !in 200..299) throw RemoteException(describeError(code, body, model))
+    }
 
+    /** Lists the models this key can call and picks the best general-purpose Flash model. */
+    private suspend fun discoverModel(key: String): String? {
+        val (code, body) = Http.get(
+            client = http,
+            url = "$BASE_URL/models?pageSize=200",
+            headers = mapOf("x-goog-api-key" to key),
+            serviceName = "Gemini",
+        )
+        if (code !in 200..299) return null
+        val names = runCatching { json.decodeFromString(GeminiModelList.serializer(), body) }.getOrNull()
+            ?.models.orEmpty()
+            .filter { "generateContent" in it.supportedGenerationMethods }
+            .map { it.name.removePrefix("models/") }
+        return pickModel(names)
+    }
+
+    private fun parse(body: String): String {
         val response = try {
             json.decodeFromString(GeminiResponse.serializer(), body)
         } catch (e: SerializationException) {
@@ -152,7 +197,17 @@ class GeminiClient(
         }
     }
 
-    private companion object {
-        const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+    companion object {
+        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+        private val EXCLUDE = listOf("lite", "image", "tts", "audio", "live", "embedding", "exp", "preview", "thinking", "8b")
+
+        /** Prefers the rolling Flash alias, then the newest stable Flash version, then any Flash. */
+        fun pickModel(names: List<String>): String? {
+            if ("gemini-flash-latest" in names) return "gemini-flash-latest"
+            val flash = names.filter { it.startsWith("gemini") && "flash" in it }
+            val stable = flash.filter { n -> EXCLUDE.none { it in n } }
+            val version = { n: String -> Regex("gemini-(\\d+(?:\\.\\d+)?)").find(n)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0 }
+            return stable.maxByOrNull(version) ?: flash.maxByOrNull(version)
+        }
     }
 }

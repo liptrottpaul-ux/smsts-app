@@ -176,8 +176,12 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
             item { SectionLabel("${state.jobs.size} roles") }
             items(state.jobs, key = { it.id }) { job ->
                 JobCard(job, briefs[job.id]) {
-                    vm.select(job)
-                    onOpenStrategy()
+                    if (job.isSearchPage) {
+                        uri.openUri(job.url)
+                    } else {
+                        vm.select(job)
+                        onOpenStrategy()
+                    }
                 }
             }
         }
@@ -189,6 +193,10 @@ private fun JobCard(job: JobListing, brief: StrategyBrief?, onClick: () -> Unit)
     val c = AsmTheme.colors
     TonalCard(tint = c.surface, border = !c.isDark, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (job.isSearchPage) {
+                PillBadge("Search page", color = c.textSecondary, background = c.surfaceSunken)
+                Spacer(Modifier.width(6.dp))
+            }
             PillBadge(
                 job.source,
                 color = if (job.isSample) c.textSecondary else c.slate,
@@ -222,7 +230,11 @@ private fun JobCard(job: JobListing, brief: StrategyBrief?, onClick: () -> Unit)
                 Text(it, style = MaterialTheme.typography.labelMedium, color = c.textTertiary)
             }
             Spacer(Modifier.weight(1f))
-            Text("Build strategy", style = MaterialTheme.typography.labelLarge, color = c.accent)
+            Text(
+                if (job.isSearchPage) "Open on ${job.source}" else "Build strategy",
+                style = MaterialTheme.typography.labelLarge,
+                color = c.accent,
+            )
             Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.accent)
         }
     }
