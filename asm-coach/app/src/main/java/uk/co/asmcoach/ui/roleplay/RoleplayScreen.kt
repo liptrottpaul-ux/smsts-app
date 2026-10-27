@@ -234,9 +234,7 @@ private fun SetupContent(
 
         item {
             SectionLabel(if (usePack) "Your panel for this role" else "Your panel")
-            val seats = pack?.panel?.takeIf { usePack && it.isNotEmpty() }
-                ?.mapIndexed { i, m -> Seat(m.name, m.role, Persona.entries[i % Persona.entries.size]) }
-                ?: state.mode.personas.map { Seat(it.displayName, it.role, it) }
+            val seats = buildSeats(pack?.takeIf { usePack }, state.mode)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 seats.forEach { SeatMini(it, Modifier.weight(1f)) }
             }

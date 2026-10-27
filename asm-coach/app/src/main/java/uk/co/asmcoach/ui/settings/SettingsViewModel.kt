@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.asmcoach.AppContainer
+import uk.co.asmcoach.data.model.InterviewMode
+import uk.co.asmcoach.ui.roleplay.buildSeats
 
 sealed interface UpdateStatus {
     data object Idle : UpdateStatus
@@ -100,8 +102,18 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    val voices = container.tts.summary
+
+    /** Plays the default panel, one line each, so the user can hear the voices are distinct and matched. */
     fun previewVoice() {
         container.tts.baseRate = _form.value.speechRate
-        container.tts.speak("Morning. Let's get you ready for site.", "preview")
+        container.tts.refreshVoices()
+        viewModelScope.launch {
+            buildSeats(null, InterviewMode.StandardPanel).forEach { seat ->
+                container.tts.speakAndAwait("Hello, I'm ${seat.name}, ${seat.role}.", seat.style)
+            }
+        }
     }
+
+    fun refreshVoices() = container.tts.refreshVoices()
 }

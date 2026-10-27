@@ -46,7 +46,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import android.content.Intent
+import android.speech.tts.TextToSpeech
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -72,6 +77,10 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     val vm = containerViewModel { SettingsViewModel(container) }
     val form by vm.form.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
+    val voices by vm.voices.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // Pick up voices installed while the user was in Android's settings.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshVoices() }
     val uri = LocalUriHandler.current
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -174,14 +183,37 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     valueRange = 0.7f..1.4f,
                     colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = c.accent, inactiveTrackColor = c.switchOff, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
                 )
-                SecondaryButton("Preview voice", onClick = vm::previewVoice, icon = Icons.AutoMirrored.Rounded.VolumeUp)
-                Spacer(Modifier.height(10.dp))
+                SecondaryButton("Preview the panel's voices", onClick = vm::previewVoice, icon = Icons.AutoMirrored.Rounded.VolumeUp)
+                Spacer(Modifier.height(14.dp))
+                Text("British English voices on this phone", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
                 Text(
-                    "Uses your phone's own speech engines. For the best British voice, install " +
-                        "\"English (United Kingdom)\" voice data in Android's text-to-speech settings.",
+                    "${voices.male} male · ${voices.female} female" +
+                        (if (voices.other > 0) " · ${voices.other} unlabelled" else "") +
+                        (if (voices.online > 0) " · natural online voices available" else ""),
                     style = MaterialTheme.typography.bodySmall,
-                    color = c.textSecondary,
+                    color = if (voices.hasBoth) c.good else c.warn,
                 )
+                if (!voices.hasBoth || voices.online == 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "For natural, gender-matched interviewers: open Text-to-speech settings, choose " +
+                            "\"Speech Services by Google\" as the engine, then install \"English (United Kingdom)\" " +
+                            "voice data. Come back and tap Preview.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.textSecondary,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SecondaryButton("Text-to-speech settings", onClick = {
+                        runCatching { context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    })
+                    SecondaryButton("Install voices", onClick = {
+                        runCatching {
+                            context.startActivity(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                    })
+                }
             }
         }
 

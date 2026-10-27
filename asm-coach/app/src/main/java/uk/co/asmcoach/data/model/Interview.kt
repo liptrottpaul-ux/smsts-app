@@ -1,13 +1,14 @@
 package uk.co.asmcoach.data.model
 
 import kotlinx.serialization.Serializable
+import uk.co.asmcoach.voice.VoiceGender
 
-/** A fictional interviewer. Pitch and rate give each one a distinct TTS voice. */
+/** A fictional interviewer; [gender] picks a matching TTS voice and [rate] gives a little character. */
 enum class Persona(
     val displayName: String,
     val role: String,
     val brief: String,
-    val pitch: Float,
+    val gender: VoiceGender,
     val rate: Float,
 ) {
     ProjectDirector(
@@ -15,15 +16,15 @@ enum class Persona(
         role = "Senior Project Director",
         brief = "Tier 1 contractor director. Cares about programme, leadership, client relationships " +
             "and whether this candidate can run a section of site on their own. Direct, warm but probing.",
-        pitch = 0.88f,
-        rate = 0.95f,
+        gender = VoiceGender.Male,
+        rate = 0.97f,
     ),
     CommercialManager(
         displayName = "Priya Shah",
         role = "Commercial Manager",
         brief = "Focuses on cost control, variations, valuations, subcontractor packages, records for " +
             "claims and early warnings under NEC/JCT. Sharp, numbers-driven; tests the M&A angle hard.",
-        pitch = 1.05f,
+        gender = VoiceGender.Female,
         rate = 1.0f,
     ),
     SafetyAuditor(
@@ -31,8 +32,8 @@ enum class Persona(
         role = "H&S Auditor",
         brief = "Ex-HSE-minded auditor. Tests CDM 2015, RAMS, permits, temporary works, RIDDOR, " +
             "behavioural safety and SMSTS knowledge. Calm, forensic, asks 'what exactly would you do next?'.",
-        pitch = 0.97f,
-        rate = 0.92f,
+        gender = VoiceGender.Male,
+        rate = 0.95f,
     );
 
     val title: String get() = "$displayName · $role"

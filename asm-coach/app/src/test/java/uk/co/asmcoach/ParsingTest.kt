@@ -120,4 +120,25 @@ class ParsingTest {
         assertEquals(1, reed.size)
         assertEquals("https://www.reed.co.uk/jobs/assistant-site-manager/54123456?source=search", reed[0].url)
     }
+
+    @Test
+    fun `classifies engine voices by gender`() {
+        val cat = uk.co.asmcoach.voice.VoiceCatalog
+        val male = uk.co.asmcoach.voice.VoiceGender.Male
+        val female = uk.co.asmcoach.voice.VoiceGender.Female
+        assertEquals(male, cat.genderOf("en-gb-x-gbb-network", emptySet()))
+        assertEquals(male, cat.genderOf("en-gb-x-rjs-local", emptySet()))
+        assertEquals(female, cat.genderOf("en-gb-x-gba-local", emptySet()))
+        assertEquals(female, cat.genderOf("en-GB-SMTf00", emptySet()))
+        assertEquals(male, cat.genderOf("en-GB-SMTm00", emptySet()))
+        assertEquals(female, cat.genderOf("Some Voice", setOf("female")))
+        assertEquals(uk.co.asmcoach.voice.VoiceGender.Unknown, cat.genderOf("en-gb-x-zzz-local", emptySet()))
+    }
+
+    @Test
+    fun `panel seats get gender-matched distinct voice slots`() {
+        val seats = uk.co.asmcoach.ui.roleplay.buildSeats(null, uk.co.asmcoach.data.model.InterviewMode.StandardPanel)
+        assertEquals(listOf("Male", "Female", "Male"), seats.map { it.gender.name })
+        assertEquals(listOf(0, 0, 1), seats.map { it.slot })
+    }
 }

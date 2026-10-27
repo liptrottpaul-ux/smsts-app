@@ -54,7 +54,8 @@ class RolePackAgent(private val gemini: GeminiClient) {
             {
               "roleSummary": "2 sentences: what this employer needs from this ASM and what the project looks like",
               "panel": [
-                {"name": "fictional full name", "role": "job title typical for this employer, e.g. Construction Manager / Build Manager / Commercial Manager / H&S Advisor", "focus": "what they probe"}
+                {"name": "fictional full name", "role": "job title typical for this employer, e.g. Construction Manager / Build Manager / Commercial Manager / H&S Advisor", "focus": "what they probe",
+                 "voice": "male" | "female" (must match the name; a realistic mix)}
               ] (exactly 3; index 0 is the lead),
               "prepTopics": [
                 {"title": "topic taken from THIS listing's requirements", "whyItMatters": "1 sentence tied to the listing",

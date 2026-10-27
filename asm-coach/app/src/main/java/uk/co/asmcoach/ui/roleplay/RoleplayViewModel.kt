@@ -35,14 +35,39 @@ import uk.co.asmcoach.data.persist.InterviewResult
 import uk.co.asmcoach.data.persist.PracticeStore
 import uk.co.asmcoach.data.remote.AppJson
 import uk.co.asmcoach.voice.SpeechRecognizerManager
+import uk.co.asmcoach.voice.VoiceGender
 import uk.co.asmcoach.voice.VoiceStyle
 import java.util.UUID
 
 enum class Stage { Setup, Live, Evaluating, Results }
 
-/** One interviewer on the panel; [voice] picks the TTS pitch, rate and voice slot. */
-data class Seat(val name: String, val role: String, val voice: Persona) {
+/**
+ * One interviewer on the panel. [voice] sets avatar colour and speaking rate; [gender] and
+ * [slot] pick a matching, distinct TTS voice (slot = index among same-gender panel members).
+ */
+data class Seat(
+    val name: String,
+    val role: String,
+    val voice: Persona,
+    val gender: VoiceGender = voice.gender,
+    val slot: Int = 0,
+) {
     val initials: String get() = name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1) }
+    val style: VoiceStyle get() = VoiceStyle(rate = voice.rate, slot = slot, gender = gender)
+}
+
+/** Builds the panel from a role pack (or the mode's default personas), giving each person their own voice. */
+fun buildSeats(pack: RolePack?, mode: InterviewMode): List<Seat> {
+    val raw = pack?.panel?.takeIf { it.isNotEmpty() }?.mapIndexed { i, m ->
+        val gender = when (m.voice.lowercase()) {
+            "male" -> VoiceGender.Male
+            "female" -> VoiceGender.Female
+            // Older packs have no voice field: default to a mixed panel.
+            else -> if (i == 1) VoiceGender.Female else VoiceGender.Male
+        }
+        Seat(m.name, m.role, Persona.entries[i % Persona.entries.size], gender)
+    } ?: mode.personas.map { Seat(it.displayName, it.role, it) }
+    return raw.mapIndexed { i, seat -> seat.copy(slot = raw.take(i).count { it.gender == seat.gender }) }
 }
 
 /** A main question in this interview: from the role pack or the researched bank. */
@@ -151,9 +176,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         typedOnly = !voice || !voiceInputAvailable
         val s = _state.value
         val activePack = activePack()
-        val seats = activePack?.panel?.takeIf { it.isNotEmpty() }
-            ?.mapIndexed { i, m -> Seat(m.name, m.role, Persona.entries[i % Persona.entries.size]) }
-            ?: s.mode.personas.map { Seat(it.displayName, it.role, it) }
+        val seats = buildSeats(activePack, s.mode)
         plan = buildPlan(activePack, seats, s)
         planIndex = 0
         probesOnCurrent = 0
@@ -321,7 +344,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
                 error = null,
             )
         }
-        tts.speakAndAwait(text, seat.voice.voice())
+        tts.speakAndAwait(text, seat.style)
         awaitAnswer()
     }
 
@@ -348,7 +371,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
                     }.getOrNull()
                 }
             }
-            tts.speakAndAwait(ACKS.random(), seat.voice.voice())
+            tts.speakAndAwait(ACKS.random(), seat.style)
             val reaction = ai.await()
             when {
                 reaction == null -> localProbe(current, thread)
@@ -464,7 +487,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
                 phase = Phase.Speaking,
             )
         }
-        tts.speakAndAwait(closing, lead.voice.voice())
+        tts.speakAndAwait(closing, lead.style)
         evaluate()
     }
 
@@ -527,7 +550,6 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         tts.stop()
     }
 
-    private fun Persona.voice() = VoiceStyle(pitch = pitch, rate = rate, voiceSlot = ordinal)
 
     companion object {
         const val GENERAL = "general"

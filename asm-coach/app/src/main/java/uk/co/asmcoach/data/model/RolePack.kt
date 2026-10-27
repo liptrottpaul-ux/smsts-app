@@ -17,7 +17,13 @@ data class RolePack(
 
 /** A plausible interviewer for this employer (fictional name, real-world job title). */
 @Serializable
-data class PanelMember(val name: String = "", val role: String = "", val focus: String = "")
+data class PanelMember(
+    val name: String = "",
+    val role: String = "",
+    val focus: String = "",
+    /** "male" or "female", so the interviewer gets a matching voice. */
+    val voice: String = "",
+)
 
 @Serializable
 data class PrepTopic(
