@@ -1,4 +1,4 @@
-# SMSTS Exam Trainer
+# Paul's Training (SMSTS)
 
 Built website only (generated). Source is in a private repository.
 

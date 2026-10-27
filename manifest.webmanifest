@@ -1,6 +1,6 @@
 {
-  "name": "SMSTS Exam Trainer",
-  "short_name": "SMSTS",
+  "name": "Paul's Training",
+  "short_name": "Paul's Training",
   "description": "SMSTS mock exams, GE700 look-up practice and weak-spot drills.",
   "start_url": "/smsts-app/",
   "scope": "/smsts-app/",
