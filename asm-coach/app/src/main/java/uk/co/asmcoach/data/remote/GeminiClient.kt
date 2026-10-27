@@ -1,5 +1,6 @@
 package uk.co.asmcoach.data.remote
 
+import kotlinx.coroutines.delay
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -99,18 +100,43 @@ class GeminiClient(
         if (!s.hasGemini) {
             throw RemoteException("Add your free Gemini API key in Settings to use the AI coach.")
         }
-        val (code, body, model) = send(s.geminiKey, s.geminiModel, system, prompt, temperature, jsonMode, fast)
+        val (code, body, model) = sendWithRetry(s.geminiKey, s.geminiModel, system, prompt, temperature, jsonMode, fast)
             .let { first ->
                 if (first.first != 404) return@let Triple(first.first, first.second, s.geminiModel)
                 // Google retires model versions; find one this key can use, remember it, retry once.
                 val replacement = discoverModel(s.geminiKey)
                     ?: return@let Triple(first.first, first.second, s.geminiModel)
                 settings.setModel(replacement)
-                val retry = send(s.geminiKey, replacement, system, prompt, temperature, jsonMode, fast)
+                val retry = sendWithRetry(s.geminiKey, replacement, system, prompt, temperature, jsonMode, fast)
                 Triple(retry.first, retry.second, replacement)
+            }
+            .let { result ->
+                if (result.first !in BUSY || result.third == LITE_MODEL) return@let result
+                // Flash is overloaded: the lighter model usually has spare capacity.
+                val lite = send(s.geminiKey, LITE_MODEL, system, prompt, temperature, jsonMode, fast)
+                if (lite.first in 200..299) Triple(lite.first, lite.second, LITE_MODEL) else result
             }
         if (code !in 200..299) throw RemoteException(describeError(code, body, model))
         return parse(body)
+    }
+
+    /** Retries overloaded (5xx) and briefly rate-limited (429) responses with backoff. */
+    private suspend fun sendWithRetry(
+        key: String,
+        model: String,
+        system: String,
+        prompt: String,
+        temperature: Float,
+        jsonMode: Boolean,
+        fast: Boolean,
+    ): Pair<Int, String> {
+        var result = send(key, model, system, prompt, temperature, jsonMode, fast)
+        for (wait in RETRY_DELAYS_MS) {
+            if (result.first !in BUSY) break
+            delay(wait)
+            result = send(key, model, system, prompt, temperature, jsonMode, fast)
+        }
+        return result
     }
 
     private suspend fun send(
@@ -192,13 +218,16 @@ class GeminiClient(
             401, 403 -> "Your Gemini API key was rejected. Check it in Settings."
             404 -> "Model \"$model\" isn't available. Pick another model in Settings."
             429 -> "Free-tier rate limit reached. Wait a minute and try again."
-            in 500..599 -> "Gemini is busy right now ($code). Try again shortly."
+            in 500..599 -> "Google's Gemini servers are overloaded ($code). The app retried for you; wait a minute, then tap Try again."
             else -> "Gemini error $code: ${apiMessage.ifBlank { "unknown" }}"
         }
     }
 
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+        private const val LITE_MODEL = "gemini-flash-lite-latest"
+        private val BUSY = setOf(429, 500, 502, 503, 504)
+        private val RETRY_DELAYS_MS = listOf(1_500L, 3_000L, 6_000L)
         private val EXCLUDE = listOf("lite", "image", "tts", "audio", "live", "embedding", "exp", "preview", "thinking", "8b")
 
         /** Prefers the rolling Flash alias, then the newest stable Flash version, then any Flash. */
