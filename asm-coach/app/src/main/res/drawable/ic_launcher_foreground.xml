@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Hard hat dome -->
+    <path
+        android:fillColor="#F5B04A"
+        android:pathData="M34,60 C34,46 42,37 54,37 C66,37 74,46 74,60 Z" />
+    <!-- Ridge -->
+    <path
+        android:fillColor="#D98E22"
+        android:pathData="M51,37.2 L57,37.2 L57,60 L51,60 Z" />
+    <!-- Brim -->
+    <path
+        android:fillColor="#F5B04A"
+        android:pathData="M28,60 L80,60 C80,64 77,66 74,66 L34,66 C31,66 28,64 28,60 Z" />
+    <!-- Voice wave -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F5F5F7"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M40,74 L40,76 M47,72 L47,78 M54,70 L54,80 M61,72 L61,78 M68,74 L68,76" />
+</vector>

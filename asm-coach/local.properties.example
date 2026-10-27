@@ -1,0 +1,10 @@
+# Copy to local.properties (never commit it). All keys are optional:
+# they can also be pasted into the app's Settings screen at runtime.
+sdk.dir=/path/to/Android/sdk
+
+# Google AI Studio (free tier): https://aistudio.google.com/apikey
+GEMINI_API_KEY=
+# Serper.dev (2,500 free searches): https://serper.dev
+SERPER_API_KEY=
+# Firecrawl (free credits): https://firecrawl.dev
+FIRECRAWL_API_KEY=
