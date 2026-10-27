@@ -8,7 +8,10 @@ import uk.co.asmcoach.data.model.Persona
 import uk.co.asmcoach.data.model.StrategyBrief
 import uk.co.asmcoach.data.remote.AppJson
 import uk.co.asmcoach.data.remote.JsonText
+import uk.co.asmcoach.data.remote.htmlToText
+import uk.co.asmcoach.data.repo.JobRepository
 import uk.co.asmcoach.data.repo.ListingParser
+import java.time.LocalDate
 
 class ParsingTest {
 
@@ -43,5 +46,20 @@ class ParsingTest {
         assertEquals("£42,000 - £48,000 per annum", ListingParser.salary(text))
         assertEquals("Warrington", ListingParser.location(text))
         assertNull(ListingParser.location("Remote role, anywhere"))
+    }
+
+    @Test
+    fun `formats reed salary and date`() {
+        assertEquals("£40,000 – £46,000", JobRepository.formatSalary(40000.0, 46000.0))
+        assertEquals("£45,000", JobRepository.formatSalary(45000.0, null))
+        assertNull(JobRepository.formatSalary(null, null))
+        assertEquals(LocalDate.of(2026, 10, 27), JobRepository.parseReedDate("27/10/2026"))
+        assertNull(JobRepository.parseReedDate("yesterday"))
+    }
+
+    @Test
+    fun `strips html from job descriptions`() {
+        val text = htmlToText("<p>SMSTS &amp; First Aid</p><ul><li>CSCS</li></ul>Salary &pound;45k")
+        assertEquals("SMSTS & First Aid\n• CSCS\nSalary £45k", text)
     }
 }

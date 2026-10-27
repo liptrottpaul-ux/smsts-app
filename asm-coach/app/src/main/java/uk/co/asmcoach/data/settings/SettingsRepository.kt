@@ -16,6 +16,7 @@ private val Context.settingsStore by preferencesDataStore(name = "settings")
 
 data class AppSettings(
     val geminiKey: String,
+    val reedKey: String,
     val serperKey: String,
     val firecrawlKey: String,
     val geminiModel: String,
@@ -26,13 +27,14 @@ data class AppSettings(
 ) {
     val profile: CandidateProfile get() = CandidateProfile(name = candidateName, extraNotes = profileNotes)
     val hasGemini: Boolean get() = geminiKey.isNotBlank()
-    val hasJobSearch: Boolean get() = serperKey.isNotBlank() || firecrawlKey.isNotBlank()
+    val hasJobSearch: Boolean get() = reedKey.isNotBlank() || serperKey.isNotBlank() || firecrawlKey.isNotBlank()
 }
 
 class SettingsRepository(private val context: Context) {
 
     private object Keys {
         val gemini = stringPreferencesKey("gemini_key")
+        val reed = stringPreferencesKey("reed_key")
         val serper = stringPreferencesKey("serper_key")
         val firecrawl = stringPreferencesKey("firecrawl_key")
         val model = stringPreferencesKey("gemini_model")
@@ -45,6 +47,7 @@ class SettingsRepository(private val context: Context) {
     val settings: Flow<AppSettings> = context.settingsStore.data.map { p ->
         AppSettings(
             geminiKey = p[Keys.gemini].orEmpty().ifBlank { BuildConfig.GEMINI_API_KEY },
+            reedKey = p[Keys.reed].orEmpty().ifBlank { BuildConfig.REED_API_KEY },
             serperKey = p[Keys.serper].orEmpty().ifBlank { BuildConfig.SERPER_API_KEY },
             firecrawlKey = p[Keys.firecrawl].orEmpty().ifBlank { BuildConfig.FIRECRAWL_API_KEY },
             geminiModel = p[Keys.model].orEmpty().ifBlank { DEFAULT_MODEL },
@@ -68,6 +71,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun update(
         geminiKey: String,
+        reedKey: String,
         serperKey: String,
         firecrawlKey: String,
         geminiModel: String,
@@ -77,6 +81,7 @@ class SettingsRepository(private val context: Context) {
     ) {
         context.settingsStore.edit {
             it[Keys.gemini] = geminiKey.trim()
+            it[Keys.reed] = reedKey.trim()
             it[Keys.serper] = serperKey.trim()
             it[Keys.firecrawl] = firecrawlKey.trim()
             it[Keys.model] = geminiModel.trim()

@@ -45,6 +45,27 @@ object Http {
         }
         .build()
 
+    /** GETs a URL and returns (status code, body text). Runs on the IO dispatcher. */
+    suspend fun get(
+        client: OkHttpClient,
+        url: String,
+        headers: Map<String, String>,
+        serviceName: String,
+    ): Pair<Int, String> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .apply { headers.forEach { (k, v) -> header(k, v) } }
+            .build()
+        try {
+            client.newCall(request).execute().use { response ->
+                response.code to (response.body?.string().orEmpty())
+            }
+        } catch (e: IOException) {
+            throw RemoteException("$serviceName is unreachable. Check your connection and try again.", e)
+        }
+    }
+
     /** POSTs a JSON body and returns (status code, body text). Runs on the IO dispatcher. */
     suspend fun postJson(
         client: OkHttpClient,

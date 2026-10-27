@@ -6,7 +6,7 @@ on free tiers.
 
 | Minutes | Tab | What it does |
 |---|---|---|
-| 0–5 | **Jobs** | Searches live Reed/Indeed ASM listings in the North West (Serper or Firecrawl), scores fit against the master profile, and writes a *Why You Win* brief plus a 30-60-90 day site management plan. |
+| 0–5 | **Jobs** | Searches live ASM listings in the North West (Reed's official API, or Serper/Firecrawl web search across Reed, Indeed, Totaljobs and CV-Library), scores fit against the master profile, and writes a *Why You Win* brief plus a 30-60-90 day site management plan. |
 | 5–15 | **Prep** | Four masterclasses (Narrative Pitch, Digital Site Tools, Technical Trade QA, Crisis Management) in accordion cards with read-aloud boxes, plus an AI coach that rewrites each lesson in your own words. |
 | 15–30 | **Roleplay** | A live voice interview with three fictional panel personas across four modes, including crisis simulations. It ends with a readiness score out of 100, a STAR critique and *Better Answers You Should Have Used* scripts. |
 
@@ -17,7 +17,7 @@ on free tiers.
 | Speech-to-text | Android `SpeechRecognizer` (en-GB, continuous mode) | Free, on-device |
 | Text-to-speech | Android `TextToSpeech` (en-GB voices, a distinct pitch and rate per persona) | Free, on-device |
 | AI agents | Gemini API via a Google AI Studio key | Free tier |
-| Job search | Serper.dev (2,500 free queries) and/or Firecrawl (free credits) | Free tier |
+| Job search | Reed Jobseeker API (recommended), Serper.dev (2,500 free queries) or Firecrawl (free credits) | Free |
 | Persistence | On-device DataStore, plus optional Firestore sync with anonymous auth | Free (Spark plan) |
 
 > **Model note:** Google has retired Gemini 1.5 Flash, so the default model is `gemini-2.5-flash`,
@@ -37,6 +37,7 @@ Every prompt includes the master profile (`data/model/CandidateProfile.kt`) and 
 2. Add your keys. Either paste them into the app's **Settings** screen at runtime, or copy
    `local.properties.example` to `local.properties` and fill it in before building.
    - Gemini: https://aistudio.google.com/apikey
+   - Reed (live jobs): https://www.reed.co.uk/developers/jobseeker
    - Serper: https://serper.dev
    - Firecrawl: https://firecrawl.dev
 3. *(Optional)* Firestore sync:

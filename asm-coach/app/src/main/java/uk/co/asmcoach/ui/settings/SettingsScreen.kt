@@ -116,6 +116,9 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
         item { SectionLabel("Live job search") }
         item {
             SurfaceCard {
+                KeyField("Reed API key (recommended)", form.reedKey) { v -> vm.edit { it.copy(reedKey = v) } }
+                LinkText("Free key from Reed's Jobseeker API") { uri.openUri("https://www.reed.co.uk/developers/jobseeker") }
+                Spacer(Modifier.height(14.dp))
                 KeyField("Serper API key", form.serperKey) { v -> vm.edit { it.copy(serperKey = v) } }
                 LinkText("2,500 free searches at serper.dev") { uri.openUri("https://serper.dev") }
                 Spacer(Modifier.height(14.dp))

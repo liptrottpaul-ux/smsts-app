@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +59,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
     val hasKey by vm.hasSearchKey.collectAsStateWithLifecycle()
     val briefs by vm.briefs.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
+    val uri = LocalUriHandler.current
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     LazyColumn(
@@ -88,7 +90,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Posted this week", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
-                        Text("Reed and Indeed via Google results", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                        Text("Reed, Indeed, Totaljobs and CV-Library", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
                     }
                     Switch(
                         checked = state.pastWeekOnly,
@@ -111,12 +113,22 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (!hasKey) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "Add a free Serper or Firecrawl key in Settings to search live listings.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = c.textSecondary,
-                    )
+                    Spacer(Modifier.height(12.dp))
+                    TonalCard(tint = c.tintAmber, onClick = onOpenSettings, contentPadding = 14.dp) {
+                        Text("Live search needs one free key", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Get a free Reed Jobseeker API key (takes a minute), paste it in Settings, then search again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textSecondary,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row {
+                            SecondaryButton("Open Settings", onClick = onOpenSettings, icon = Icons.Rounded.Settings)
+                            Spacer(Modifier.width(8.dp))
+                            SecondaryButton("Get Reed key", onClick = { uri.openUri("https://www.reed.co.uk/developers/jobseeker") })
+                        }
+                    }
                 }
             }
         }

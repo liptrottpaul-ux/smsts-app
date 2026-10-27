@@ -4,6 +4,8 @@ sdk.dir=/path/to/Android/sdk
 
 # Google AI Studio (free tier): https://aistudio.google.com/apikey
 GEMINI_API_KEY=
+# Reed Jobseeker API (free, recommended for live jobs): https://www.reed.co.uk/developers/jobseeker
+REED_API_KEY=
 # Serper.dev (2,500 free searches): https://serper.dev
 SERPER_API_KEY=
 # Firecrawl (free credits): https://firecrawl.dev

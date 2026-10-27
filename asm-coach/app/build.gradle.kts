@@ -34,6 +34,7 @@ android {
         versionName = "1.0.0"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"${secret("GEMINI_API_KEY")}\"")
+        buildConfigField("String", "REED_API_KEY", "\"${secret("REED_API_KEY")}\"")
         buildConfigField("String", "SERPER_API_KEY", "\"${secret("SERPER_API_KEY")}\"")
         buildConfigField("String", "FIRECRAWL_API_KEY", "\"${secret("FIRECRAWL_API_KEY")}\"")
         buildConfigField("boolean", "FIREBASE_CONFIGURED", hasGoogleServices.toString())

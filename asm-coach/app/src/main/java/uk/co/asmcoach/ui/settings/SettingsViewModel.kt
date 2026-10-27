@@ -11,6 +11,7 @@ import uk.co.asmcoach.AppContainer
 
 data class SettingsForm(
     val geminiKey: String = "",
+    val reedKey: String = "",
     val serperKey: String = "",
     val firecrawlKey: String = "",
     val model: String = "",
@@ -34,6 +35,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             val s = container.settings.current()
             _form.value = SettingsForm(
                 geminiKey = s.geminiKey,
+                reedKey = s.reedKey,
                 serperKey = s.serperKey,
                 firecrawlKey = s.firecrawlKey,
                 model = s.geminiModel,
@@ -51,7 +53,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         val f = _form.value
         _form.update { it.copy(saving = true) }
         viewModelScope.launch {
-            container.settings.update(f.geminiKey, f.serperKey, f.firecrawlKey, f.model, f.name, f.notes, f.speechRate)
+            container.settings.update(f.geminiKey, f.reedKey, f.serperKey, f.firecrawlKey, f.model, f.name, f.notes, f.speechRate)
             container.tts.baseRate = f.speechRate
             _form.update { it.copy(saving = false, message = "Saved") }
             then()

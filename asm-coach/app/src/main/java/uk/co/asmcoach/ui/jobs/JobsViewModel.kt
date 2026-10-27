@@ -16,7 +16,7 @@ import uk.co.asmcoach.data.model.SearchRegion
 
 data class JobsUiState(
     val region: SearchRegion = SearchRegion.NorthWest,
-    val pastWeekOnly: Boolean = true,
+    val pastWeekOnly: Boolean = false,
     val loading: Boolean = false,
     val jobs: List<JobListing> = emptyList(),
     val searched: Boolean = false,

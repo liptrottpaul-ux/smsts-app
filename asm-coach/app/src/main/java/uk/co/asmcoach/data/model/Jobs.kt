@@ -14,14 +14,36 @@ data class JobListing(
     val salary: String? = null,
     val postedLabel: String? = null,
     val isSample: Boolean = false,
+    val reedJobId: Long? = null,
 )
 
-enum class SearchRegion(val label: String, val query: String) {
-    NorthWest("North West", "(\"North West\" OR Manchester OR Liverpool OR Preston OR Warrington OR Chester)"),
-    Manchester("Greater Manchester", "(Manchester OR Salford OR Stockport OR Bolton OR Wigan OR Oldham)"),
-    Merseyside("Merseyside", "(Liverpool OR Wirral OR \"St Helens\" OR Knowsley OR Southport)"),
-    Lancashire("Lancashire", "(Preston OR Blackburn OR Blackpool OR Lancaster OR Burnley OR Chorley)"),
-    Cheshire("Cheshire", "(Chester OR Warrington OR Crewe OR Macclesfield OR Runcorn OR Widnes)"),
+/** [towns] are searched individually (with a radius) on Reed; [query] is used for web search. */
+enum class SearchRegion(val label: String, val query: String, val towns: List<String>) {
+    NorthWest(
+        "North West",
+        "(\"North West\" OR Manchester OR Liverpool OR Preston OR Warrington OR Chester)",
+        listOf("Manchester", "Liverpool", "Preston", "Warrington", "Chester", "Lancaster"),
+    ),
+    Manchester(
+        "Greater Manchester",
+        "(Manchester OR Salford OR Stockport OR Bolton OR Wigan OR Oldham)",
+        listOf("Manchester", "Bolton", "Stockport", "Wigan"),
+    ),
+    Merseyside(
+        "Merseyside",
+        "(Liverpool OR Wirral OR \"St Helens\" OR Knowsley OR Southport)",
+        listOf("Liverpool", "Birkenhead", "St Helens"),
+    ),
+    Lancashire(
+        "Lancashire",
+        "(Preston OR Blackburn OR Blackpool OR Lancaster OR Burnley OR Chorley)",
+        listOf("Preston", "Blackburn", "Blackpool", "Lancaster"),
+    ),
+    Cheshire(
+        "Cheshire",
+        "(Chester OR Warrington OR Crewe OR Macclesfield OR Runcorn OR Widnes)",
+        listOf("Chester", "Warrington", "Crewe", "Macclesfield"),
+    ),
 }
 
 @Serializable
