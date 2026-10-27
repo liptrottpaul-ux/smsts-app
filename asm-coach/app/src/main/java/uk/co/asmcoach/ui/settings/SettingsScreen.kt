@@ -55,6 +55,9 @@ import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.data.settings.SettingsRepository
 import uk.co.asmcoach.ui.components.ChoiceChip
+import uk.co.asmcoach.ui.components.IosScreen
+import uk.co.asmcoach.ui.components.NavTextButton
+import uk.co.asmcoach.ui.theme.switchOff
 import uk.co.asmcoach.ui.components.CircleIconButton
 import uk.co.asmcoach.ui.components.PillBadge
 import uk.co.asmcoach.ui.components.PrimaryButton
@@ -73,24 +76,26 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(c.background).imePadding(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    IosScreen(
+        title = "Settings",
+        largeTitle = false,
+        modifier = Modifier.imePadding(),
+        spacing = 8.dp,
+        leading = { NavTextButton("Cancel", onBack) },
+        trailing = { NavTextButton("Done", { vm.save(onBack) }, prominent = true, enabled = form.loaded && !form.saving) },
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack)
-                Spacer(Modifier.weight(1f))
-                form.message?.let { PillBadge(it, color = c.good, background = c.tintSage) }
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                form.message?.let {
+                    PillBadge(it, color = c.good, background = c.tintSage)
+                    Spacer(Modifier.height(8.dp))
+                }
+                Text(
+                    "Everything runs on free tiers. Keys stay on this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                )
             }
-            Spacer(Modifier.height(16.dp))
-            Text("Settings", style = MaterialTheme.typography.displaySmall, color = c.textPrimary)
-            Text(
-                "Everything runs on free tiers. Keys stay on this device.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = c.textSecondary,
-            )
         }
 
         item { SectionLabel("AI agents · Google Gemini") }
@@ -167,7 +172,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     value = form.speechRate,
                     onValueChange = { v -> vm.edit { it.copy(speechRate = v) } },
                     valueRange = 0.7f..1.4f,
-                    colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.hairline),
+                    colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = c.accent, inactiveTrackColor = c.switchOff, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
                 )
                 SecondaryButton("Preview voice", onClick = vm::previewVoice, icon = Icons.AutoMirrored.Rounded.VolumeUp)
                 Spacer(Modifier.height(10.dp))
@@ -254,23 +259,13 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
             }
         }
 
-        item {
-            Spacer(Modifier.height(10.dp))
-            PrimaryButton(
-                "Save",
-                onClick = { vm.save(onBack) },
-                loading = form.saving,
-                enabled = form.loaded,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
     }
 }
 
 @Composable
 private fun fieldColors() = TextFieldDefaults.colors(
-    focusedContainerColor = AsmTheme.colors.surfaceSunken,
-    unfocusedContainerColor = AsmTheme.colors.surfaceSunken,
+    focusedContainerColor = AsmTheme.colors.surfaceRaised,
+    unfocusedContainerColor = AsmTheme.colors.surfaceRaised,
     focusedIndicatorColor = Color.Transparent,
     unfocusedIndicatorColor = Color.Transparent,
     cursorColor = AsmTheme.colors.accent,

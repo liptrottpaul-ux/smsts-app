@@ -64,6 +64,8 @@ import uk.co.asmcoach.ui.components.ChipFlow
 import uk.co.asmcoach.ui.components.CircleIconButton
 import uk.co.asmcoach.ui.components.ErrorBanner
 import uk.co.asmcoach.ui.components.IconTile
+import uk.co.asmcoach.ui.components.IosScreen
+import uk.co.asmcoach.ui.components.NavIconButton
 import uk.co.asmcoach.ui.components.LargeTitleHeader
 import uk.co.asmcoach.ui.components.MeterBar
 import uk.co.asmcoach.ui.components.ReadAloudBox
@@ -89,21 +91,12 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
 
     DisposableEffect(Unit) { onDispose { vm.stopSpeaking() } }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    IosScreen(
+        title = "Prep",
+        subtitle = job?.let { listOfNotNull(it.title, it.company, it.location).joinToString(" · ") }
+            ?: "Pick a role on the Jobs tab and your prep is built for it.",
+        trailing = { NavIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings) },
     ) {
-        item {
-            LargeTitleHeader(
-                eyebrow = "Minutes 5–15 · Role prep",
-                title = "Prep",
-                subtitle = job?.let { listOfNotNull(it.title, it.company, it.location).joinToString(" · ") }
-                    ?: "Pick a role on the Jobs tab and your prep is built for it.",
-            ) {
-                CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
-            }
-        }
         state.error?.let { msg -> item { ErrorBanner(msg, onDismiss = vm::dismissError) } }
 
         when {
@@ -167,7 +160,7 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                         subtitle = (if ("${job.id}|$id" in practice.done) "✓ Reviewed · " else "") + topic.whyItMatters,
                         expanded = id in state.expandedLessons,
                         onToggle = { vm.toggleLesson(id) },
-                        tint = c.tintSage,
+                        tint = c.surface,
                     ) {
                         Bullets(topic.points)
                         if (topic.sayThis.isNotBlank()) {
@@ -260,8 +253,7 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                 subtitle = "${module.subtitle} · ${module.minutes} min",
                 expanded = state.expandedModule == module.id,
                 onToggle = { vm.toggleModule(module.id) },
-                tint = c.tint(module.tint),
-                leading = { IconTile(module.icon(), tint = c.textPrimary, background = c.surface.copy(alpha = if (c.isDark) 0.4f else 0.8f)) },
+                leading = { IconTile(module.icon(), tint = Color.White, background = module.tileColor()) },
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     module.lessons.forEach { lesson ->
@@ -456,7 +448,7 @@ private fun LessonCard(
         subtitle = null,
         expanded = expanded,
         onToggle = onToggle,
-        tint = c.surface,
+        tint = c.surfaceRaised,
     ) {
         Bullets(lesson.points)
         if (lesson.keyTerms.isNotEmpty()) {
@@ -487,6 +479,14 @@ private fun LessonCard(
             )
         }
     }
+}
+
+/** Settings-style tile colours: systemOrange, systemBlue, systemGreen, systemRed. */
+private fun Masterclass.tileColor(): Color = when (tint) {
+    ModuleTint.Amber -> Color(0xFFFF9500)
+    ModuleTint.Slate -> Color(0xFF007AFF)
+    ModuleTint.Sage -> Color(0xFF34C759)
+    ModuleTint.Rose -> Color(0xFFFF3B30)
 }
 
 private fun Masterclass.icon(): ImageVector = when (tint) {

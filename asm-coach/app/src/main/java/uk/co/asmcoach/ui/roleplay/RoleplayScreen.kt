@@ -63,6 +63,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -93,6 +94,11 @@ import uk.co.asmcoach.data.model.Speaker
 import uk.co.asmcoach.ui.components.Bullets
 import uk.co.asmcoach.ui.components.ChoiceChip
 import uk.co.asmcoach.ui.components.CircleIconButton
+import uk.co.asmcoach.ui.components.IosScreen
+import uk.co.asmcoach.ui.components.IosSwitch
+import uk.co.asmcoach.ui.components.NavIconButton
+import uk.co.asmcoach.ui.components.NavTextButton
+import uk.co.asmcoach.ui.components.rememberHaptics
 import uk.co.asmcoach.ui.components.ErrorBanner
 import uk.co.asmcoach.ui.components.LargeTitleHeader
 import uk.co.asmcoach.ui.components.MeterBar
@@ -131,6 +137,11 @@ fun RoleplayScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJo
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         if (granted || !vm.voiceInputAvailable) vm.start(voice = granted) else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    val haptics = rememberHaptics()
+    LaunchedEffect(state.stage) {
+        if (state.stage == Stage.Results) haptics.success()
     }
 
     // Never keep the mic or speaker running when the screen isn't visible.
@@ -172,20 +183,11 @@ private fun SetupContent(
     val usePack = pack != null && state.tailorToJob
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    IosScreen(
+        title = "Interview",
+        subtitle = "A mock interview for the role you picked, with that employer's kind of panel.",
+        trailing = { NavIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings) },
     ) {
-        item {
-            LargeTitleHeader(
-                eyebrow = "Minutes 15–30 · Live voice",
-                title = "Roleplay",
-                subtitle = "An interview for the role you picked, with that employer's kind of panel.",
-            ) {
-                CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
-            }
-        }
         state.error?.let { msg -> item { ErrorBanner(msg, onDismiss = vm::dismissError) } }
 
         item { RoleCard(target, pack, progress, state.tailorToJob, vm, onOpenJobs) }
@@ -315,7 +317,7 @@ private fun ModeCard(mode: InterviewMode, selected: Boolean, onClick: () -> Unit
     TonalCard(
         tint = tint,
         onClick = onClick,
-        modifier = if (selected) Modifier.border(2.dp, c.accent, RoundedCornerShape(20.dp)) else Modifier,
+        modifier = if (selected) Modifier.border(2.dp, c.accent, uk.co.asmcoach.ui.components.CardShape) else Modifier,
         contentPadding = 16.dp,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,11 +371,7 @@ private fun RoleCard(
                 }
             }
             if (pack != null) {
-                Switch(
-                    checked = tailor,
-                    onCheckedChange = vm::setTailor,
-                    colors = SwitchDefaults.colors(checkedTrackColor = c.good, checkedThumbColor = c.surface),
-                )
+                IosSwitch(checked = tailor, onCheckedChange = vm::setTailor)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -463,29 +461,25 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
     val seat = state.activeSeat ?: state.seats.firstOrNull() ?: state.mode.personas.first().let { Seat(it.displayName, it.role, it) }
     var showTranscript by rememberSaveable { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    IosScreen(
+        title = if (state.onFollowUp) "Follow-up · ${state.mainAsked} of ${state.total}" else "Question ${state.mainAsked.coerceAtLeast(1)} of ${state.total}",
+        largeTitle = false,
+        spacing = 14.dp,
+        leading = { NavTextButton("End", vm::endEarly) },
+        trailing = {
+            if (state.phase == Phase.Paused) {
+                NavIconButton(Icons.Rounded.PlayArrow, "Resume", vm::resume)
+            } else {
+                NavIconButton(Icons.Rounded.Pause, "Pause", vm::pause)
+            }
+        },
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PillBadge(if (state.onFollowUp) "Follow-up · question ${state.mainAsked} of ${state.total}" else "Question ${state.mainAsked.coerceAtLeast(1)} of ${state.total}")
-                Spacer(Modifier.weight(1f))
-                if (state.phase == Phase.Paused) {
-                    CircleIconButton(Icons.Rounded.PlayArrow, "Resume", vm::resume)
-                } else {
-                    CircleIconButton(Icons.Rounded.Pause, "Pause", vm::pause)
-                }
-                Spacer(Modifier.width(8.dp))
-                CircleIconButton(Icons.Rounded.Close, "End and score", vm::endEarly)
-            }
-            Spacer(Modifier.height(10.dp))
-            MeterBar((state.mainAsked - 1).coerceAtLeast(0) / state.total.coerceAtLeast(1).toFloat(), c.accent)
+            MeterBar((state.mainAsked - 1).coerceAtLeast(0) / state.total.coerceAtLeast(1).toFloat(), c.accent, Modifier.padding(top = 8.dp))
         }
 
         item {
-            TonalCard(tint = c.surface, border = !c.isDark, contentPadding = 22.dp) {
+            TonalCard(tint = c.surface, contentPadding = 20.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SeatAvatar(seat, size = 56, active = state.phase == Phase.Speaking)
                     Spacer(Modifier.width(14.dp))
@@ -683,14 +677,10 @@ private fun EvaluatingContent() {
 private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: RoleplayViewModel) {
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    IosScreen(
+        title = "How you did",
+        trailing = { NavTextButton("Done", vm::reset, prominent = true) },
     ) {
-        item {
-            LargeTitleHeader(eyebrow = "Post-interview evaluation", title = "How you did")
-        }
         item {
             SurfaceCard {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {

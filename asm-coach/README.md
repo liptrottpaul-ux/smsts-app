@@ -111,3 +111,27 @@ competency scoring guidance ([Shine](https://www.shineinterview.com/competency-b
 [excavation and temporary works guidance](https://humanfocus.co.uk/blog/excavation-safety-temporary-works-inspections-and-service-interfaces-that-prevent-collapse/);
 2026 North West ASM adverts on [Find a Job](https://findajob.dwp.gov.uk/details/18008731).
 Always check regulatory details against HSE guidance (e.g. CDM 2015 L153).
+
+## Design: iOS Human Interface Guidelines on Android
+
+The UI follows Apple's HIG (iOS 18) as closely as Compose allows:
+
+- **Colour** (`ui/theme/Theme.kt`): iOS semantic colours with light/dark variants:
+  systemBackground (#FFFFFF / #000000), secondarySystemBackground (#F2F2F7 / #1C1C1E),
+  tertiary (#FFFFFF / #2C2C2E), label / secondaryLabel (60%) / tertiaryLabel (30%), separator,
+  tertiarySystemFill, systemBlue (#007AFF / #0A84FF) as the tint, systemGreen/Orange/Red for status.
+- **Type:** the Dynamic Type default ramp with SF tracking (Large Title 34/41 +0.37, Title 1 28,
+  Title 2 22, Headline/Body 17/22 −0.43, Callout 16, Subheadline 15, Footnote 13, Captions 12/11),
+  in `sp` so it follows the system text size. SF Pro is licensed for Apple platforms only, so the
+  platform sans is used.
+- **Geometry:** `ContinuousShape` draws continuous ("squircle") corners: cards 20, buttons 14/12,
+  segmented 9. Every control has at least a 44pt touch target.
+- **Bars:** a large title collapses into a centred inline title as you scroll, with the bar
+  material and 0.5pt hairline fading in; the tab bar is a blurred material (via
+  [Haze](https://github.com/chrisbanes/haze)) with filled glyphs for the selected tab.
+- **Controls:** filled systemBlue buttons, gray-fill tinted buttons, UISwitch-style toggles (green
+  track, constant white thumb), UISegmentedControl with a springing thumb, Cancel/Done sheet bar.
+- **Motion:** springs with damping 0.8 and response ≈ 0.35 s; pushes slide in from the trailing edge
+  with the previous screen moving back a third; Settings presents as a sheet from the bottom.
+- **Haptics:** Android equivalents of `.impact(.light)` (taps), selection (toggles, segments, tabs)
+  and `.notification(.success)` (role ready, answer scored, evaluation ready).

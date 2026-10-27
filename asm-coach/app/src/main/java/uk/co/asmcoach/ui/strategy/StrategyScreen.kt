@@ -36,7 +36,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +52,10 @@ import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.data.model.PlanPhase
 import uk.co.asmcoach.data.model.StrategyBrief
 import uk.co.asmcoach.ui.components.Bullets
+import uk.co.asmcoach.ui.components.IosScreen
+import uk.co.asmcoach.ui.components.NavBackButton
+import uk.co.asmcoach.ui.components.NavIconButton
+import uk.co.asmcoach.ui.components.rememberHaptics
 import uk.co.asmcoach.ui.components.ChipFlow
 import uk.co.asmcoach.ui.components.CircleIconButton
 import uk.co.asmcoach.ui.components.EmptyState
@@ -73,29 +81,35 @@ fun StrategyScreen(container: AppContainer, onBack: () -> Unit, onPrep: () -> Un
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val job = state.job
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(c.background),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack)
-                Spacer(Modifier.weight(1f))
-                if (job != null && !job.isSample) {
-                    CircleIconButton(Icons.AutoMirrored.Rounded.OpenInNew, "Open listing") { uri.openUri(job.url) }
-                }
+    // Success haptic when this role's prep finishes while the screen is open.
+    val haptics = rememberHaptics()
+    val ready = state.pack != null
+    var wasReady by remember { mutableStateOf(ready) }
+    LaunchedEffect(ready) {
+        if (ready && !wasReady) haptics.success()
+        wasReady = ready
+    }
+
+    IosScreen(
+        title = "Role",
+        largeTitle = false,
+        leading = { NavBackButton("Jobs", onBack) },
+        trailing = {
+            if (job != null && !job.isSample) {
+                NavIconButton(Icons.AutoMirrored.Rounded.OpenInNew, "Open listing") { uri.openUri(job.url) }
             }
-        }
+        },
+    ) {
         if (job == null) {
             item { EmptyState(Icons.Rounded.AutoAwesome, "No role selected", "Pick a listing on the Jobs tab first.") }
-            return@LazyColumn
+            return@IosScreen
         }
         item {
             Column(Modifier.padding(top = 8.dp)) {
                 PillBadge("Why you win · ${job.source}")
                 Spacer(Modifier.height(10.dp))
                 Text(job.title, style = MaterialTheme.typography.headlineMedium, color = c.textPrimary)
+                Spacer(Modifier.height(2.dp))
                 val meta = listOfNotNull(job.company, job.location, job.salary).joinToString(" · ")
                 if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
             }

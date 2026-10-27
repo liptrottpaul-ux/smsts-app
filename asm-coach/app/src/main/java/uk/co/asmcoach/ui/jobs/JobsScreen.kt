@@ -41,6 +41,9 @@ import uk.co.asmcoach.data.model.SearchRegion
 import uk.co.asmcoach.data.model.StrategyBrief
 import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.ui.components.ChoiceChip
+import uk.co.asmcoach.ui.components.IosScreen
+import uk.co.asmcoach.ui.components.IosSwitch
+import uk.co.asmcoach.ui.components.NavIconButton
 import uk.co.asmcoach.ui.components.CircleIconButton
 import uk.co.asmcoach.ui.components.EmptyState
 import uk.co.asmcoach.ui.components.ErrorBanner
@@ -66,21 +69,11 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
     val uri = LocalUriHandler.current
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 12.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    IosScreen(
+        title = "Jobs",
+        subtitle = "Pick a real role. The app prepares you for it, then interviews you for it.",
+        trailing = { NavIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings) },
     ) {
-        item {
-            LargeTitleHeader(
-                eyebrow = "Minutes 0–5 · Strategy",
-                title = "Find your role",
-                subtitle = "Pick a real role. The app prepares you for it, then interviews you for it.",
-            ) {
-                CircleIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings)
-            }
-        }
-
         if ((latestBuild ?: 0) > vm.updates.currentBuild) {
             item {
                 TonalCard(tint = c.tintSage, onClick = { uri.openUri(UpdateChecker.DOWNLOAD_URL) }, contentPadding = 14.dp) {
@@ -114,16 +107,7 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
                         Text("Posted this week", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
                         Text("Reed, Indeed, Totaljobs and CV-Library", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
                     }
-                    Switch(
-                        checked = state.pastWeekOnly,
-                        onCheckedChange = vm::setPastWeekOnly,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = c.good,
-                            checkedThumbColor = c.surface,
-                            uncheckedTrackColor = c.hairline,
-                            uncheckedBorderColor = c.hairline,
-                        ),
-                    )
+                    IosSwitch(checked = state.pastWeekOnly, onCheckedChange = vm::setPastWeekOnly)
                 }
                 Spacer(Modifier.height(16.dp))
                 PrimaryButton(
