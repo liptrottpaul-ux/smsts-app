@@ -60,6 +60,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -94,6 +97,7 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
     val packs by vm.packs.collectAsStateWithLifecycle()
     val progressMap by vm.progress.collectAsStateWithLifecycle()
     val practice by vm.practice.collectAsStateWithLifecycle()
+    val timelines by vm.timeline.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val job = target
@@ -155,7 +159,7 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                                 Column {
                                     Text(progress?.stage.orEmpty(), style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
                                     Text(
-                                        "Start with what's here; more questions appear as they're written.",
+                                        "Starter prep from the advert is ready below; the AI upgrades it as each part arrives.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = c.textSecondary,
                                     )
@@ -163,6 +167,19 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                             }
                         }
                     }
+                }
+                progress?.error?.takeIf { progress?.running != true }?.let { err ->
+                    item {
+                        ErrorBanner(
+                            "Some AI parts didn't finish: $err. Your starter prep is still usable.",
+                            onDismiss = {},
+                            actionLabel = "Retry",
+                            onAction = vm::prepareRole,
+                        )
+                    }
+                }
+                timelines[job.id]?.takeIf { it.isNotEmpty() }?.let { lines ->
+                    item { TimelineCard(lines) }
                 }
                 if (pack.thinSource) item { ThinSourceCard() }
                 if (pack.basedOn.isNotBlank()) {
@@ -265,7 +282,13 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                             onSpeak = vm::toggleSpeak,
                         )
                         Spacer(Modifier.height(12.dp))
-                        if (key in state.revealed || drill != null) {
+                        if (q.modelAnswer.isBlank()) {
+                            Text(
+                                if (progress?.running == true) "Model answer is being written…" else "No model answer yet: practise it and the coach will write a better version of yours.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.textSecondary,
+                            )
+                        } else if (key in state.revealed || drill != null) {
                             ReadAloudBox(
                                 text = q.modelAnswer,
                                 speaking = speaking == "$id:answer",
@@ -378,6 +401,23 @@ private fun ReadinessBar(label: String, value: String, fraction: Float) {
         Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.25f))) {
             Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color.White))
+        }
+    }
+}
+
+/** What happened while preparing this role, with timings: collapsed to the last line by default. */
+@Composable
+private fun TimelineCard(lines: List<String>) {
+    val c = AsmTheme.colors
+    var open by remember { mutableStateOf(false) }
+    SurfaceCard(onClick = { open = !open }, contentPadding = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Preparation log", style = MaterialTheme.typography.labelMedium, color = c.textSecondary, modifier = Modifier.weight(1f))
+            Text(if (open) "Hide" else "Show all", style = MaterialTheme.typography.labelMedium, color = c.accent)
+        }
+        Spacer(Modifier.height(4.dp))
+        (if (open) lines else lines.takeLast(1)).forEach {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = if (it.contains("✗")) c.bad else c.textPrimary)
         }
     }
 }

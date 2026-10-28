@@ -56,6 +56,7 @@ class PrepViewModel(private val container: AppContainer) : ViewModel() {
     val targetJob = container.roles.job
     val packs = container.roles.packs
     val progress = container.roles.progress
+    val timeline = container.roles.timeline
     val practice: StateFlow<PracticeData> = container.practice.data
     private val recognizer = SpeechRecognizerManager(container.app)
     val voiceAvailable: Boolean = recognizer.isAvailable

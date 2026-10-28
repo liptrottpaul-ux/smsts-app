@@ -169,4 +169,20 @@ class ParsingTest {
         assertEquals(false, ListingParser.isSiteRole("Assistant Site Manager salaries in Preston"))
         assertEquals(false, ListingParser.isSiteRole("Store Manager"))
     }
+
+    @Test
+    fun `builds starter prep from the advert without AI`() {
+        val advert = """
+            We are looking for an Assistant Site Manager for a 180-plot development in Warrington.
+            • Experience managing subcontractors and trades on new build housing
+            • Knowledge of NHBC key stage inspections and build quality standards
+            • Valid SMSTS, CSCS and First Aid certificates are essential
+            • Ability to keep the build programme on track
+        """.trimIndent()
+        val (topics, questions) = uk.co.asmcoach.data.content.LocalPackBuilder.build(advert, "Assistant Site Manager plots NHBC")
+        assertEquals(true, topics.isNotEmpty())
+        assertEquals(true, topics.any { it.title.contains("NHBC") && it.listingRef.contains("NHBC") })
+        assertEquals(true, questions.any { it.question.contains("subcontractors") })
+        assertEquals(true, questions.all { it.lookingFor.isNotBlank() })
+    }
 }
