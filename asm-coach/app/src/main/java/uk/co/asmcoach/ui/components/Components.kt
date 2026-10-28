@@ -182,7 +182,8 @@ fun IosScreen(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .background(c.barMaterial.copy(alpha = c.barMaterial.alpha * barAlpha))
+                    // Opaque: no blur here, so a translucent bar let scrolled cards show through the title.
+                    .background(c.background.copy(alpha = barAlpha))
                     .padding(top = top)
                     .height(NavBarHeight),
             ) {

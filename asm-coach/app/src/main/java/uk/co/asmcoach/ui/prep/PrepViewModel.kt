@@ -225,7 +225,7 @@ class PrepViewModel(private val container: AppContainer) : ViewModel() {
                 if (unpractised > 0) add("Practise $unpractised more of this role's questions out loud.")
                 drills.count { it.score <= 2 }.takeIf { it > 0 }?.let { add("Redo the $it answer(s) that scored 2 or less, using the better answer as a guide.") }
                 weakest?.takeIf { it.value < 3.5 }?.let { add("Weakest area: ${it.key}. Prepare one more STAR story for it.") }
-                if (lastInterview == null) add("Do a full mock interview for this role on the Roleplay tab.")
+                if (lastInterview == null) add("Do a full mock interview for this role on the Interview tab.")
                 else if (lastInterview.offerLikelihood < 60) add("Last mock gave a ${lastInterview.offerLikelihood}% offer chance. Fix its 'to raise your chances' points, then redo it.")
                 if (topicsReviewed < pack.prepTopics.size) add("Open the remaining ${pack.prepTopics.size - topicsReviewed} prep topic(s).")
                 if (checklistDone < PrepChecklist.items.size) add("Tick off the remaining ${PrepChecklist.items.size - checklistDone} preparation steps.")

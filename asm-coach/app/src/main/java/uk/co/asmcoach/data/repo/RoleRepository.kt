@@ -144,8 +144,10 @@ class RoleRepository(
                         ?: ListingDetails(job.snippet, "search snippet only", job.company)
                 }
                 val r = async {
+                    // Search results often omit the employer; then wait for the advert to name it.
+                    val company = job.company ?: d.await().company
                     withTimeoutOrNull(RESEARCH_TIMEOUT_MS) {
-                        runCatching { jobs.employerResearch(job.company, job.location) }.getOrNull()
+                        runCatching { jobs.employerResearch(company, job.location) }.getOrNull()
                     }.orEmpty()
                 }
                 d.await() to r.await()

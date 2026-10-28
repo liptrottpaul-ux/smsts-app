@@ -1,16 +1,20 @@
 package uk.co.asmcoach.data.remote
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import uk.co.asmcoach.BuildConfig
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 val AppJson = Json {
     ignoreUnknownKeys = true
@@ -45,46 +49,59 @@ object Http {
         }
         .build()
 
-    /** GETs a URL and returns (status code, body text). Runs on the IO dispatcher. */
+    /**
+     * Runs [request] on OkHttp's own threads. Unlike a blocking execute(), cancelling the
+     * coroutine (e.g. a withTimeout) cancels the HTTP call, so time limits really hold.
+     */
+    private suspend fun send(client: OkHttpClient, request: Request, serviceName: String): Pair<Int, String> =
+        suspendCancellableCoroutine { cont ->
+            val call = client.newCall(request)
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        cont.resume(response.use { it.code to (it.body?.string().orEmpty()) })
+                    } catch (e: IOException) {
+                        onFailure(call, e)
+                    }
+                }
+
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) {
+                        cont.resumeWithException(RemoteException("$serviceName is unreachable. Check your connection and try again.", e))
+                    }
+                }
+            })
+        }
+
+    /** GETs a URL and returns (status code, body text). Cancellable. */
     suspend fun get(
         client: OkHttpClient,
         url: String,
         headers: Map<String, String>,
         serviceName: String,
-    ): Pair<Int, String> = withContext(Dispatchers.IO) {
+    ): Pair<Int, String> {
         val request = Request.Builder()
             .url(url)
             .get()
             .apply { headers.forEach { (k, v) -> header(k, v) } }
             .build()
-        try {
-            client.newCall(request).execute().use { response ->
-                response.code to (response.body?.string().orEmpty())
-            }
-        } catch (e: IOException) {
-            throw RemoteException("$serviceName is unreachable. Check your connection and try again.", e)
-        }
+        return send(client, request, serviceName)
     }
 
-    /** POSTs a JSON body and returns (status code, body text). Runs on the IO dispatcher. */
+    /** POSTs a JSON body and returns (status code, body text). Cancellable. */
     suspend fun postJson(
         client: OkHttpClient,
         url: String,
         body: String,
         headers: Map<String, String>,
         serviceName: String,
-    ): Pair<Int, String> = withContext(Dispatchers.IO) {
+    ): Pair<Int, String> {
         val request = Request.Builder()
             .url(url)
             .post(body.toRequestBody(JSON))
             .apply { headers.forEach { (k, v) -> header(k, v) } }
             .build()
-        try {
-            client.newCall(request).execute().use { response ->
-                response.code to (response.body?.string().orEmpty())
-            }
-        } catch (e: IOException) {
-            throw RemoteException("$serviceName is unreachable. Check your connection and try again.", e)
-        }
+        return send(client, request, serviceName)
     }
 }

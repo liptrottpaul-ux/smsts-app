@@ -83,13 +83,20 @@ class GeminiClient(
         lite: Boolean = false,
     ): T {
         val raw = call(system, prompt, temperature, jsonMode = true, fast = fast, quick = quick, lite = lite)
-        return try {
-            json.decodeFromString(serializer, JsonText.extract(raw))
-        } catch (e: SerializationException) {
-            throw RemoteException("The AI returned an unexpected format. Please try again.", e)
-        } catch (e: IllegalArgumentException) {
-            throw RemoteException("The AI returned an unexpected format. Please try again.", e)
+        decode(serializer, raw)?.let { return it }
+        // Flash-Lite sometimes returns malformed or cut-off JSON for long outputs: redo it on the main model.
+        if (lite) {
+            decode(serializer, call(system, prompt, temperature, jsonMode = true, fast = true))?.let { return it }
         }
+        throw RemoteException("The AI returned an unexpected format. Please try again.")
+    }
+
+    private fun <T> decode(serializer: KSerializer<T>, raw: String): T? = try {
+        json.decodeFromString(serializer, JsonText.extract(raw))
+    } catch (e: SerializationException) {
+        null
+    } catch (e: IllegalArgumentException) {
+        null
     }
 
     private suspend fun call(

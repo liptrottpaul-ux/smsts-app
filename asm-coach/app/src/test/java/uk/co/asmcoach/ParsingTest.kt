@@ -185,4 +185,11 @@ class ParsingTest {
         assertEquals(true, questions.any { it.question.contains("subcontractors") })
         assertEquals(true, questions.all { it.lookingFor.isNotBlank() })
     }
+
+    @Test
+    fun companyFromAdvertText() {
+        assertEquals("Persimmon Homes", uk.co.asmcoach.data.repo.ListingParser.company("Persimmon Homes are looking for an Assistant Site Manager in Wigan."))
+        assertEquals("Acme Build", uk.co.asmcoach.data.repo.ListingParser.company("Assistant Site Manager\nCompany: Acme Build\nLocation: Bolton"))
+        assertEquals(null, uk.co.asmcoach.data.repo.ListingParser.company("our client is a leading housebuilder"))
+    }
 }

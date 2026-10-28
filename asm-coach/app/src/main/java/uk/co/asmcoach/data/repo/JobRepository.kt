@@ -84,7 +84,10 @@ class JobRepository(
      * JobPosting structured data (most boards embed it), Firecrawl, readable page text, and
      * finally the search snippet. [ListingDetails.source] says which one was used.
      */
-    suspend fun details(job: JobListing): ListingDetails {
+    suspend fun details(job: JobListing): ListingDetails =
+        fetchDetails(job).let { d -> if (d.company != null) d else d.copy(company = ListingParser.company(d.text)) }
+
+    private suspend fun fetchDetails(job: JobListing): ListingDetails {
         if (job.isSample) return ListingDetails(job.snippet, "sample listing", job.company)
         val s = settings.current()
         if (job.reedJobId != null && s.reedKey.isNotBlank()) {
@@ -369,6 +372,17 @@ object ListingParser {
             "cv-library.co.uk" in u -> Regex("/job/\\d+").containsMatchIn(u)
             else -> true
         }
+    }
+
+    private val companyRegexes = listOf(
+        Regex("(?im)^\\s*(?:company|employer|hiring organi[sz]ation|client)\\s*[:|]\\s*([A-Z][\\w&'.\\- ]{2,50}?)\\s*$"),
+        Regex("\\b(?:at|join|with)\\s+((?:[A-Z][\\w&']+\\s){0,3}(?:Homes|Construction|Developments|Group|Ltd|Limited|Contractors|Building|Partnerships|plc))\\b"),
+        Regex("\\b((?:[A-Z][\\w&']+\\s){1,3}(?:Homes|Construction|Developments|Group|Ltd|Limited|Contractors|Partnerships|plc))\\s+(?:is|are)\\s+(?:looking|seeking|recruiting|hiring)"),
+    )
+
+    /** The employer's name when the advert states it, e.g. "Company: X" or "X Homes are looking for". */
+    fun company(text: String): String? = companyRegexes.firstNotNullOfOrNull { r ->
+        r.find(text.take(6_000))?.groupValues?.get(1)?.trim()?.takeIf { it.length > 2 }
     }
 
     fun salary(text: String): String? = salaryRegex.find(text)?.value?.trim()
