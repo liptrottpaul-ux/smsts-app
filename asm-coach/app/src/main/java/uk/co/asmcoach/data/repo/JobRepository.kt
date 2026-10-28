@@ -120,8 +120,6 @@ class JobRepository(
             .take(6)
             .map { "${it.title}: ${it.snippet}" }
     }
-        return full?.takeIf { it.length > job.snippet.length }?.take(12_000) ?: job.snippet
-    }
 
     private suspend fun searchReed(key: String, region: SearchRegion, pastWeekOnly: Boolean): List<JobListing> =
         coroutineScope {
