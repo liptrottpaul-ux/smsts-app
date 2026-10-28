@@ -155,7 +155,8 @@ class JobRepository(
             "(site:reed.co.uk OR site:uk.indeed.com OR site:totaljobs.com OR site:cv-library.co.uk)"
 
     /** Single vacancies first; board search pages are kept (labelled) so results are never empty. */
-    private fun List<RawHit>.toListings() = mapNotNull { it.toListing() }
+    private fun List<RawHit>.toListings() = filter { ListingParser.isSiteRole(it.title) }
+        .mapNotNull { it.toListing() }
         .distinctBy { it.url }
         .sortedBy { it.isSearchPage }
 
@@ -318,7 +319,11 @@ object ListingParser {
         html.replace(Regex("<(script|style|nav|header|footer|noscript|svg)[^>]*>.*?</\\1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), " "),
     )
 
-    private val relevantTitle = Regex("(?i)site|construction|manager|supervisor|foreman|build|assistant")
+    private val siteRole = Regex("(?i)site manager|assistant site|site supervisor|site engineer|construction manager|build manager|assistant construction|\\bASM\\b|site agent|site management")
+    private val notAJob = Regex("(?i)salar(y|ies)|how to become|career guide|average pay|what does")
+
+    /** True for titles that are genuinely site-management roles (not salary pages or other "manager" jobs). */
+    fun isSiteRole(title: String): Boolean = siteRole.containsMatchIn(title) && !notAJob.containsMatchIn(title)
     private val markdownLink = Regex("\\[([^\\]]{6,160})\\]\\((https?://[^)\\s]+)[^)]*\\)")
     private val htmlLink = Regex("<a\\b[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 
@@ -328,7 +333,7 @@ object ListingParser {
             val title = cleanText(m.groupValues[1])
             val url = absolute(m.groupValues[2], pageUrl)
             val context = cleanText(markdown.substring(m.range.last + 1, minOf(markdown.length, m.range.last + 360)))
-            Vacancy(title, url, context).takeIf { isSingleVacancy(url) && relevantTitle.containsMatchIn(title) && !title.startsWith("!") }
+            Vacancy(title, url, context).takeIf { isSingleVacancy(url) && isSiteRole(title) && !title.startsWith("!") }
         }.toList()
 
     /** Same, for raw HTML (Reed's server-rendered results). */
@@ -338,7 +343,7 @@ object ListingParser {
             val title = cleanText(m.groupValues[2].replace(Regex("<[^>]+>"), " "))
             val context = cleanText(html.substring(m.range.last + 1, minOf(html.length, m.range.last + 1200)).replace(Regex("<[^>]+>"), " "))
                 .take(300)
-            Vacancy(title, url, context).takeIf { title.length in 6..160 && isSingleVacancy(url) && relevantTitle.containsMatchIn(title) }
+            Vacancy(title, url, context).takeIf { title.length in 6..160 && isSingleVacancy(url) && isSiteRole(title) }
         }.toList()
 
     private fun absolute(url: String, pageUrl: String): String = when {

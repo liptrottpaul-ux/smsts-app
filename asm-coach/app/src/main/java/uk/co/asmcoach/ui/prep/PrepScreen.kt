@@ -143,6 +143,24 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
             else -> {
                 val readiness = PrepViewModel.readiness(job.id, pack, practice)
                 item { ReadinessCard(readiness, onInterview) }
+                if (progress?.running == true) {
+                    item {
+                        TonalCard(tint = c.tintSlate, contentPadding = 14.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(progress?.stage.orEmpty(), style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                                    Text(
+                                        "Start with what's here; more questions appear as they're written.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = c.textSecondary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 if (pack.thinSource) item { ThinSourceCard() }
                 if (pack.basedOn.isNotBlank()) {
                     item {

@@ -378,8 +378,13 @@ private fun RoleCard(
         Spacer(Modifier.height(10.dp))
         when {
             pack != null -> Text(
-                if (tailor) "Ready: ${pack.questions.size} role questions, ${pack.scenarios.size} scenarios. Questions start instantly."
-                else "Role questions off: general ASM interview.",
+                when {
+                    !tailor -> "Role questions off: general ASM interview."
+                    progress?.running == true ->
+                        "${pack.questions.size} role questions so far, more on the way. You can start now; " +
+                            "the researched question bank fills any gaps."
+                    else -> "Ready: ${pack.questions.size} role questions, ${pack.scenarios.size} scenarios. Questions start instantly."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = c.textSecondary,
             )

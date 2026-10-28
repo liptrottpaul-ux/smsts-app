@@ -1,6 +1,7 @@
 package uk.co.asmcoach
 
 import android.content.Context
+import java.util.concurrent.TimeUnit
 import uk.co.asmcoach.data.agent.CoachAgent
 import uk.co.asmcoach.data.agent.InterviewAgent
 import uk.co.asmcoach.data.agent.RolePackAgent
@@ -26,7 +27,14 @@ class AppContainer(val app: Context) {
 
     val settings = SettingsRepository(app)
     val gemini = GeminiClient(http, settings)
-    val jobs = JobRepository(ReedClient(http), SerperClient(http), FirecrawlClient(http), settings, PageFetcher(http))
+    val jobs = JobRepository(
+        ReedClient(http),
+        SerperClient(http),
+        FirecrawlClient(http.newBuilder().callTimeout(45, TimeUnit.SECONDS).build()),
+        settings,
+        // Job pages must answer fast or be skipped: one slow board shouldn't stall preparing a role.
+        PageFetcher(http.newBuilder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS).callTimeout(15, TimeUnit.SECONDS).build()),
+    )
     val strategyAgent = StrategyAgent(gemini)
     val coachAgent = CoachAgent(gemini)
     val interviewAgent = InterviewAgent(gemini)

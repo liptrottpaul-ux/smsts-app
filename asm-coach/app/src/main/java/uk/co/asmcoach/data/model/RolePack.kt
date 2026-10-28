@@ -13,6 +13,8 @@ data class RolePack(
     val basedOn: String = "",
     /** True when only a search snippet was available, so the prep is less specific. */
     val thinSource: Boolean = false,
+    /** False while question batches or scenarios are still being written. */
+    val complete: Boolean = false,
     val panel: List<PanelMember> = emptyList(),
     val prepTopics: List<PrepTopic> = emptyList(),
     val questions: List<BankQuestion> = emptyList(),

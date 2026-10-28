@@ -23,7 +23,7 @@ class StrategyAgent(private val gemini: GeminiClient) {
             appendLine()
             appendLine(SCHEMA)
         }
-        val brief = gemini.generateStructured(StrategyBrief.serializer(), SYSTEM, prompt, temperature = 0.5f)
+        val brief = gemini.generateStructured(StrategyBrief.serializer(), SYSTEM, prompt, temperature = 0.5f, fast = true)
         return brief.copy(compatibilityScore = brief.compatibilityScore.coerceIn(0, 100))
     }
 

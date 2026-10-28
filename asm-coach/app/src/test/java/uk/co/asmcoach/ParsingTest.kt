@@ -160,4 +160,13 @@ class ParsingTest {
         assertEquals(true, d.text.contains("• SMSTS"))
         assertEquals(false, d.text.contains("<b>"))
     }
+
+    @Test
+    fun `keeps site roles and drops salary pages`() {
+        assertEquals(true, ListingParser.isSiteRole("Assistant Site Manager - Housing"))
+        assertEquals(true, ListingParser.isSiteRole("Assistant Construction Manager"))
+        assertEquals(false, ListingParser.isSiteRole("Manager Manufacturing salaries in Preston"))
+        assertEquals(false, ListingParser.isSiteRole("Assistant Site Manager salaries in Preston"))
+        assertEquals(false, ListingParser.isSiteRole("Store Manager"))
+    }
 }
