@@ -225,7 +225,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
             QuestionBank.all
                 .filter { it.sector == Sector.Any || it.sector == sector || (sector == null && it.sector == Sector.Contractor) }
                 .forEach { c ->
-                    val bank = BankQuestion(c.category, 0, c.question, c.lookingFor, "", c.probes)
+                    val bank = BankQuestion(category = c.category, question = c.question, lookingFor = c.lookingFor, probes = c.probes)
                     add(PlannedQuestion(seatFor(c.category, seats), c.question, bank, c.id))
                 }
         }
@@ -276,17 +276,20 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         return if (sc != null) {
             val first = sc.questions.firstOrNull() ?: "What do you do first, and who do you call?"
             val bank = BankQuestion(
-                QuestionCategory.SCENARIO, sc.askedBy, "${sc.briefing} $first",
-                "Safety first, clear priorities and sequence, escalation to the right people, legal duties, records.",
-                "", sc.questions.drop(1),
+                category = QuestionCategory.SCENARIO,
+                askedBy = sc.askedBy,
+                question = "${sc.briefing} $first",
+                lookingFor = "Safety first, clear priorities and sequence, escalation to the right people, legal duties, records.",
+                probes = sc.questions.drop(1),
             )
             PlannedQuestion(sc.askedBy.coerceIn(0, seats.lastIndex), "Let's run a live scenario. ${sc.briefing} $first", bank, PracticeStore.keyOf(sc.briefing))
         } else if (pack == null) {
             val crisis = s.scenario
             val bank = BankQuestion(
-                QuestionCategory.SCENARIO, 0, crisis.briefing,
-                "Safety first, clear priorities and sequence, escalation to the right people, legal duties, records.",
-                "", listOf("What's the very first thing you do?", "Who do you call, in what order?"),
+                category = QuestionCategory.SCENARIO,
+                question = crisis.briefing,
+                lookingFor = "Safety first, clear priorities and sequence, escalation to the right people, legal duties, records.",
+                probes = listOf("What's the very first thing you do?", "Who do you call, in what order?"),
             )
             PlannedQuestion(seatFor(QuestionCategory.SAFETY, seats), "Let's run a live scenario. ${crisis.briefing} What do you do?", bank, "crisis-${crisis.name}")
         } else {
