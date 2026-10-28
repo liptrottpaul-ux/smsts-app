@@ -80,8 +80,9 @@ class GeminiClient(
         temperature: Float = 0.6f,
         fast: Boolean = false,
         quick: Boolean = false,
+        lite: Boolean = false,
     ): T {
-        val raw = call(system, prompt, temperature, jsonMode = true, fast = fast, quick = quick)
+        val raw = call(system, prompt, temperature, jsonMode = true, fast = fast, quick = quick, lite = lite)
         return try {
             json.decodeFromString(serializer, JsonText.extract(raw))
         } catch (e: SerializationException) {
@@ -98,6 +99,7 @@ class GeminiClient(
         jsonMode: Boolean,
         fast: Boolean,
         quick: Boolean = false,
+        lite: Boolean = false,
     ): String {
         val s = settings.current()
         if (!s.hasGemini) {
@@ -109,12 +111,18 @@ class GeminiClient(
             if (code !in 200..299) throw RemoteException(describeError(code, body, LITE_MODEL))
             return parse(body)
         }
-        val (code, body, model) = sendWithRetry(s.geminiKey, s.geminiModel, system, prompt, temperature, jsonMode, fast)
+        if (lite) {
+            // Bulk generation (role packs) on the faster Flash-Lite model; any failure falls back to the main model.
+            val (code, body) = sendWithRetry(s.geminiKey, LITE_MODEL, system, prompt, temperature, jsonMode, fast = true)
+            if (code in 200..299) return parse(body)
+        }
+        val primary = s.geminiModel
+        val (code, body, model) = sendWithRetry(s.geminiKey, primary, system, prompt, temperature, jsonMode, fast)
             .let { first ->
-                if (first.first != 404) return@let Triple(first.first, first.second, s.geminiModel)
+                if (first.first != 404) return@let Triple(first.first, first.second, primary)
                 // Google retires model versions; find one this key can use, remember it, retry once.
                 val replacement = discoverModel(s.geminiKey)
-                    ?: return@let Triple(first.first, first.second, s.geminiModel)
+                    ?: return@let Triple(first.first, first.second, primary)
                 settings.setModel(replacement)
                 val retry = sendWithRetry(s.geminiKey, replacement, system, prompt, temperature, jsonMode, fast)
                 Triple(retry.first, retry.second, replacement)
@@ -122,8 +130,8 @@ class GeminiClient(
             .let { result ->
                 if (result.first !in BUSY || result.third == LITE_MODEL) return@let result
                 // Flash is overloaded: the lighter model usually has spare capacity.
-                val lite = send(s.geminiKey, LITE_MODEL, system, prompt, temperature, jsonMode, fast)
-                if (lite.first in 200..299) Triple(lite.first, lite.second, LITE_MODEL) else result
+                val liteResult = send(s.geminiKey, LITE_MODEL, system, prompt, temperature, jsonMode, fast)
+                if (liteResult.first in 200..299) Triple(liteResult.first, liteResult.second, LITE_MODEL) else result
             }
         if (code !in 200..299) throw RemoteException(describeError(code, body, model))
         return parse(body)

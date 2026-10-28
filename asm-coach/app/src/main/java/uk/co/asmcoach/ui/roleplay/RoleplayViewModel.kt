@@ -176,7 +176,8 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         typedOnly = !voice || !voiceInputAvailable
         val s = _state.value
         val activePack = activePack()
-        val seats = buildSeats(activePack, s.mode)
+        // The role panel exists as soon as a role is picked, even before its questions are written.
+        val seats = buildSeats(pack.value?.takeIf { s.tailorToJob }, s.mode)
         plan = buildPlan(activePack, seats, s)
         planIndex = 0
         probesOnCurrent = 0

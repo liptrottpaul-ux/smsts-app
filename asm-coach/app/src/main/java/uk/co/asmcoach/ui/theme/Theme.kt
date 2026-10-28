@@ -79,73 +79,74 @@ data class AppColors(
     }
 }
 
-private val BlueLight = Color(0xFF007AFF)
-private val BlueDark = Color(0xFF0A84FF)
-private val GreenLight = Color(0xFF34C759)
-private val GreenDark = Color(0xFF30D158)
-private val OrangeLight = Color(0xFFFF9500)
-private val OrangeDark = Color(0xFFFF9F0A)
-private val RedLight = Color(0xFFFF3B30)
-private val RedDark = Color(0xFFFF453A)
+// Palette: infographic-inspired cream, charcoal, teal, coral, olive and sage.
+private val Teal = Color(0xFF1FA2AE)
+private val TealBright = Color(0xFF3FC1C9)
+private val Coral = Color(0xFFEE6352)
+private val CoralBright = Color(0xFFF27A6A)
+private val Olive = Color(0xFFB5BD45)
+private val OliveBright = Color(0xFFC9CF5E)
+private val Sage = Color(0xFF8FB28A)
+private val Charcoal = Color(0xFF263238)
+private val Cream = Color(0xFFF1ECE4)
 
-// Grouped style (as in Health, Fitness, Settings): grey canvas, white cards, grey nested elements.
 val LightColors = AppColors(
-    background = Color(0xFFF2F2F7),
-    surface = Color(0xFFFFFFFF),
-    surfaceRaised = Color(0xFFF2F2F7),
-    surfaceSunken = Color(0x1F767680),
-    hairline = Color(0x4A3C3C43),
-    textPrimary = Color(0xFF000000),
-    textSecondary = Color(0x993C3C43),
-    textTertiary = Color(0x4D3C3C43),
-    accent = BlueLight,
+    background = Cream,
+    surface = Color(0xFFFBF8F3),
+    surfaceRaised = Color(0xFFEDE7DE),
+    surfaceSunken = Color(0x14263238),
+    hairline = Color(0x2E263238),
+    textPrimary = Charcoal,
+    textSecondary = Color(0xA6263238),
+    textTertiary = Color(0x66263238),
+    accent = Teal,
     onAccent = Color.White,
-    accentSoft = BlueLight.copy(alpha = 0.12f),
-    slate = Color(0xFF5856D6),
-    tintAmber = OrangeLight.copy(alpha = 0.12f),
-    tintSage = GreenLight.copy(alpha = 0.12f),
-    tintSlate = BlueLight.copy(alpha = 0.08f),
-    tintRose = RedLight.copy(alpha = 0.10f),
-    good = Color(0xFF248A3D),
-    warn = Color(0xFFC93400),
-    bad = RedLight,
-    gray = Color(0xFF8E8E93),
-    barMaterial = Color(0xE6F2F2F7),
+    accentSoft = Teal.copy(alpha = 0.14f),
+    slate = Color(0xFF3D5A66),
+    tintAmber = Olive.copy(alpha = 0.18f),
+    tintSage = Sage.copy(alpha = 0.22f),
+    tintSlate = Teal.copy(alpha = 0.12f),
+    tintRose = Coral.copy(alpha = 0.14f),
+    good = Color(0xFF4F8A55),
+    warn = Color(0xFF8F9A1E),
+    bad = Color(0xFFE5533F),
+    gray = Color(0xFF8A9497),
+    barMaterial = Color(0xE6F1ECE4),
     isDark = false,
 )
 
 val DarkColors = AppColors(
-    background = Color(0xFF000000),
-    surface = Color(0xFF1C1C1E),
-    surfaceRaised = Color(0xFF2C2C2E),
-    surfaceSunken = Color(0x3D767680),
-    hairline = Color(0x99545458),
-    textPrimary = Color(0xFFFFFFFF),
-    textSecondary = Color(0x99EBEBF5),
-    textTertiary = Color(0x4DEBEBF5),
-    accent = BlueDark,
-    onAccent = Color.White,
-    accentSoft = BlueDark.copy(alpha = 0.18f),
-    slate = Color(0xFF5E5CE6),
-    tintAmber = OrangeDark.copy(alpha = 0.16f),
-    tintSage = GreenDark.copy(alpha = 0.16f),
-    tintSlate = BlueDark.copy(alpha = 0.14f),
-    tintRose = RedDark.copy(alpha = 0.16f),
-    good = GreenDark,
-    warn = OrangeDark,
-    bad = RedDark,
-    gray = Color(0xFF8E8E93),
-    barMaterial = Color(0xD91D1D1D),
+    background = Color(0xFF1E2629),
+    surface = Color(0xFF27323A),
+    surfaceRaised = Color(0xFF303D45),
+    surfaceSunken = Color(0x29F1ECE4),
+    hairline = Color(0x33F1ECE4),
+    textPrimary = Cream,
+    textSecondary = Color(0xA6F1ECE4),
+    textTertiary = Color(0x66F1ECE4),
+    accent = TealBright,
+    onAccent = Color(0xFF10262A),
+    accentSoft = TealBright.copy(alpha = 0.20f),
+    slate = Color(0xFF8FB7C4),
+    tintAmber = OliveBright.copy(alpha = 0.18f),
+    tintSage = Sage.copy(alpha = 0.22f),
+    tintSlate = TealBright.copy(alpha = 0.16f),
+    tintRose = CoralBright.copy(alpha = 0.18f),
+    good = Color(0xFF93C08C),
+    warn = OliveBright,
+    bad = CoralBright,
+    gray = Color(0xFF8A9497),
+    barMaterial = Color(0xE61E2629),
     isDark = true,
 )
 
-/** Vivid gradients for hero cards, in the spirit of Fitness and Health summary tiles. */
+/** Hero gradients from the same palette. */
 object Gradients {
-    val blue = listOf(Color(0xFF0A84FF), Color(0xFF5E5CE6))
-    val green = listOf(Color(0xFF30D158), Color(0xFF0FB5AE))
-    val orange = listOf(Color(0xFFFF9F0A), Color(0xFFFF375F))
-    val red = listOf(Color(0xFFFF453A), Color(0xFFBF2D5A))
-    val night = listOf(Color(0xFF1C1F2E), Color(0xFF2C2340))
+    val blue = listOf(TealBright, Color(0xFF1E8F9C))
+    val green = listOf(Color(0xFF8FC08A), Color(0xFF4F8A55))
+    val orange = listOf(OliveBright, Color(0xFF9AA537))
+    val red = listOf(CoralBright, Color(0xFFD9434F))
+    val night = listOf(Color(0xFF2B3A40), Color(0xFF1B2427))
 
     fun forScore(score: Int) = when {
         score >= 70 -> green
@@ -154,9 +155,17 @@ object Gradients {
     }
 }
 
+/** Series colours for rings and charts (coral, teal, olive, sage), as in the reference infographics. */
+object ChartColors {
+    val coral = CoralBright
+    val teal = TealBright
+    val olive = OliveBright
+    val sage = Sage
+}
+
 /** Toggle track colours (UISwitch). */
-val AppColors.switchOn: Color get() = if (isDark) GreenDark else GreenLight
-val AppColors.switchOff: Color get() = if (isDark) Color(0xFF39393D) else Color(0xFFE9E9EA)
+val AppColors.switchOn: Color get() = accent
+val AppColors.switchOff: Color get() = if (isDark) Color(0xFF3B474D) else Color(0xFFDCD5CA)
 
 private val LocalAppColors = staticCompositionLocalOf { LightColors }
 

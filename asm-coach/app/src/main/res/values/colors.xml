@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="stone_bg">#FFFFFFFF</color>
-    <color name="obsidian_bg">#FF000000</color>
-    <color name="ic_launcher_background">#FF007AFF</color>
+    <color name="stone_bg">#FFF1ECE4</color>
+    <color name="obsidian_bg">#FF1E2629</color>
+    <color name="ic_launcher_background">#FF1FA2AE</color>
     <color name="amber">#FFF5B04A</color>
 </resources>

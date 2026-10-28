@@ -95,6 +95,9 @@ import uk.co.asmcoach.data.model.SessionKind
 import uk.co.asmcoach.data.model.SessionRecord
 import uk.co.asmcoach.data.model.Speaker
 import uk.co.asmcoach.ui.components.Bullets
+import uk.co.asmcoach.data.remote.AppJson
+import uk.co.asmcoach.ui.theme.ChartColors
+import uk.co.asmcoach.ui.components.AreaChart
 import uk.co.asmcoach.ui.components.ChoiceChip
 import uk.co.asmcoach.ui.components.CircleIconButton
 import uk.co.asmcoach.ui.components.IosScreen
@@ -267,6 +270,36 @@ private fun SetupContent(
         }
 
         val interviews = history.filter { it.kind == SessionKind.Interview }
+        if (interviews.size >= 2) {
+            item { SectionLabel("Your progress") }
+            item {
+                // Oldest to newest: overall score (teal) and chance of an offer (coral).
+                val ordered = interviews.take(12).reversed()
+                val scores = ordered.map { it.score }
+                val offers = ordered.map { rec ->
+                    runCatching { AppJson.decodeFromString(Evaluation.serializer(), rec.payload).offerLikelihood }.getOrDefault(0)
+                }
+                SurfaceCard {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${scores.last()}", style = MaterialTheme.typography.headlineMedium, color = ChartColors.teal)
+                            Text("LATEST SCORE", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("${offers.last()}%", style = MaterialTheme.typography.headlineMedium, color = ChartColors.coral)
+                            Text("OFFER CHANCE", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            val delta = scores.last() - scores.first()
+                            Text((if (delta >= 0) "+" else "") + delta, style = MaterialTheme.typography.headlineMedium, color = ChartColors.olive)
+                            Text("SINCE FIRST", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    AreaChart(listOf(offers to ChartColors.coral, scores to ChartColors.teal))
+                }
+            }
+        }
         if (interviews.isNotEmpty()) {
             item { SectionLabel("Recent sessions") }
             item {

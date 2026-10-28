@@ -768,3 +768,101 @@ fun IconTile(icon: ImageVector, tint: Color, background: Color, size: Dp = 30.dp
 @Composable
 fun CircleIconButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) =
     NavIconButton(icon, contentDescription, onClick)
+
+/** One ring in [ConcentricRings]: progress 0..1, its colour and a short legend label. */
+data class RingValue(val progress: Float, val color: Color, val label: String, val value: String)
+
+/**
+ * Concentric progress rings with a legend, in the style of the reference infographic
+ * (coral outside, teal, then olive), with a big number in the centre.
+ */
+@Composable
+fun ConcentricRings(
+    rings: List<RingValue>,
+    centre: String,
+    centreCaption: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 150.dp,
+    stroke: Dp = 12.dp,
+    onHero: Boolean = false,
+) {
+    val c = AsmTheme.colors
+    val animated = rings.map { ring ->
+        animateFloatAsState(ring.progress.coerceIn(0f, 1f), IosMotion.spring(), label = ring.label).value
+    }
+    val textColor = if (onHero) Color.White else c.textPrimary
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.size(size)) {
+                val strokePx = stroke.toPx()
+                val gap = strokePx * 0.45f
+                rings.forEachIndexed { i, ring ->
+                    val inset = strokePx / 2 + i * (strokePx + gap)
+                    val arcSize = Size(this.size.width - inset * 2, this.size.height - inset * 2)
+                    if (arcSize.width <= 0f) return@forEachIndexed
+                    drawArc(ring.color.copy(alpha = 0.2f), 135f, 270f, false, Offset(inset, inset), arcSize, style = Stroke(strokePx, cap = StrokeCap.Round))
+                    drawArc(ring.color, 135f, 270f * animated[i], false, Offset(inset, inset), arcSize, style = Stroke(strokePx, cap = StrokeCap.Round))
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(centre, style = IosType.title1, color = textColor)
+                Text(centreCaption, style = IosType.caption1, color = textColor.copy(alpha = 0.7f))
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            rings.forEach { ring ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(ring.color))
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(ring.value, style = IosType.headline, color = textColor)
+                        Text(ring.label.uppercase(), style = IosType.caption2, color = textColor.copy(alpha = 0.7f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Smooth, overlapping translucent area chart (values 0..100), like the reference's layered waves. */
+@Composable
+fun AreaChart(
+    series: List<Pair<List<Int>, Color>>,
+    modifier: Modifier = Modifier,
+    height: Dp = 140.dp,
+) {
+    val c = AsmTheme.colors
+    Canvas(modifier.fillMaxWidth().height(height)) {
+        val w = size.width
+        val h = size.height
+        // Baseline grid, faint.
+        for (g in 0..3) {
+            val y = h * g / 3f
+            drawLine(c.hairline, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+        }
+        series.forEach { (values, color) ->
+            if (values.size < 2) return@forEach
+            val stepX = w / (values.size - 1)
+            val points = values.mapIndexed { i, v -> Offset(i * stepX, h - h * v.coerceIn(0, 100) / 100f) }
+            val line = androidx.compose.ui.graphics.Path().apply {
+                moveTo(points.first().x, points.first().y)
+                for (i in 1 until points.size) {
+                    val p0 = points[i - 1]
+                    val p1 = points[i]
+                    val midX = (p0.x + p1.x) / 2
+                    cubicTo(midX, p0.y, midX, p1.y, p1.x, p1.y)
+                }
+            }
+            val area = androidx.compose.ui.graphics.Path().apply {
+                addPath(line)
+                lineTo(points.last().x, h)
+                lineTo(points.first().x, h)
+                close()
+            }
+            drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.55f), color.copy(alpha = 0.08f))))
+            drawPath(line, color, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+            points.forEach { drawCircle(Color.White, radius = 3.5.dp.toPx(), center = it) ; drawCircle(color, radius = 2.2.dp.toPx(), center = it) }
+        }
+    }
+}

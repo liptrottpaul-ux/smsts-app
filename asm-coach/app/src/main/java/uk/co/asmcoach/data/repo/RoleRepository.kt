@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -22,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.serialization.Serializable
 import uk.co.asmcoach.data.agent.RolePackAgent
+import uk.co.asmcoach.data.content.PanelFactory
 import uk.co.asmcoach.data.agent.StrategyAgent
 import uk.co.asmcoach.data.model.JobListing
 import uk.co.asmcoach.data.model.QuestionCategory
@@ -94,8 +97,9 @@ class RoleRepository(
 
     /**
      * Builds whatever is missing for [job] (everything when [force]). Safe to call repeatedly.
-     * Parts are written in parallel and saved as each arrives, so Prep and Interview can start
-     * on the first content within seconds instead of waiting for one large reply.
+     * The panel is created instantly on the device; reading the advert is capped at ~12s and runs
+     * alongside employer research; then every AI part (topics, question batches, scenarios, brief)
+     * starts at once and is saved as it lands, so Prep fills in progressively.
      */
     fun prepare(job: JobListing, force: Boolean = false) {
         if (running[job.id]?.isActive == true) return
@@ -104,10 +108,29 @@ class RoleRepository(
             loaded.join()
             if (force) _packs.update { it - job.id }
             val needBrief = force || job.id !in _briefs.value
+
+            // 1. Instant: a realistic panel for this employer type, so Interview is usable immediately.
+            if (_packs.value[job.id] == null) {
+                val panel = PanelFactory.panelFor(job.id, "${job.title} ${job.snippet} ${job.company.orEmpty()}")
+                _packs.update { it + (job.id to RolePack(panel = panel)) }
+                persist()
+            }
+            val panel = _packs.value[job.id]?.panel.orEmpty()
+
+            // 2. The advert (capped) and employer research, in parallel.
             setProgress(job.id, PrepProgress("Reading the job advert…"))
-            val details = runCatching { jobs.details(job) }.getOrNull() ?: ListingDetails(job.snippet, "search snippet only", job.company)
-            val research = runCatching { jobs.employerResearch(details.company ?: job.company, details.location ?: job.location) }
-                .getOrDefault(emptyList())
+            val (details, research) = coroutineScope {
+                val d = async {
+                    withTimeoutOrNull(ADVERT_TIMEOUT_MS) { runCatching { jobs.details(job) }.getOrNull() }
+                        ?: ListingDetails(job.snippet, "search snippet only", job.company)
+                }
+                val r = async {
+                    withTimeoutOrNull(RESEARCH_TIMEOUT_MS) {
+                        runCatching { jobs.employerResearch(job.company, job.location) }.getOrNull()
+                    }.orEmpty()
+                }
+                d.await() to r.await()
+            }
             val description = buildString {
                 append(details.text)
                 if (research.isNotEmpty()) {
@@ -122,84 +145,65 @@ class RoleRepository(
                 research.size.takeIf { it > 0 }?.let { "$it employer sources" },
             ).joinToString(" · ")
             val thin = details.source == "search snippet only" || words < 120
+            _packs.update { m -> m[job.id]?.let { p -> m + (job.id to p.copy(basedOn = basedOn, thinSource = thin)) } ?: m }
+
+            // 3. Every AI part at once, four at a time, each merged in as it lands.
             val profile = settings.current().profile
             val errors = java.util.Collections.synchronizedList(mutableListOf<String>())
-            val limiter = Semaphore(3)
-
+            val limiter = Semaphore(4)
+            val existing = _packs.value[job.id]
+            val haveCategories = existing?.questions.orEmpty().map { it.category }.toSet()
+            val batches = QuestionCategory.PACK.filter { it !in haveCategories }.chunked(2)
+            val needTopics = existing?.prepTopics.isNullOrEmpty()
+            val needScenarios = existing?.scenarios.isNullOrEmpty()
+            val total = batches.size + (if (needTopics) 1 else 0) + (if (needScenarios) 1 else 0) + (if (needBrief) 1 else 0)
+            val done = java.util.concurrent.atomic.AtomicInteger()
+            fun tick() = setProgress(job.id, PrepProgress("Writing your prep… ${done.incrementAndGet()} of $total parts ready"))
             fun fail(e: Throwable, what: String) {
                 if (e is CancellationException) throw e
                 errors += e.message ?: "$what failed"
             }
+            fun merge(transform: (RolePack) -> RolePack) =
+                _packs.update { m -> m[job.id]?.let { p -> m + (job.id to transform(p)) } ?: m }
 
+            setProgress(job.id, PrepProgress("Writing your prep… 0 of $total parts ready"))
             supervisorScope {
-                val brief = if (needBrief) {
-                    async { limiter.withPermit { strategyAgent.analyse(job, description, profile) } }
-                } else {
-                    null
-                }
-
-                // 1. Core: panel, summary and prep topics, the first thing the user sees.
-                setProgress(job.id, PrepProgress("Building your panel and prep topics…"))
-                var pack = _packs.value[job.id]
-                if (pack == null || pack.panel.isEmpty()) {
-                    runCatching { limiter.withPermit { packAgent.buildCore(job, description, profile) } }
-                        .onSuccess { core ->
-                            pack = RolePack(
-                                roleSummary = core.roleSummary, panel = core.panel, prepTopics = core.prepTopics,
-                                basedOn = basedOn, thinSource = thin,
-                            )
-                            _packs.update { it + (job.id to pack!!) }
-                            persist()
-                        }
-                        .onFailure { fail(it, "Prep") }
-                }
-                val panel = pack?.panel.orEmpty()
-
-                // 2. Question batches and scenarios in parallel, merged in as each lands.
-                if (panel.isNotEmpty()) {
-                    val have = pack?.questions.orEmpty().map { it.category }.toSet()
-                    val batches = QuestionCategory.PACK.filter { it !in have }.chunked(2)
-                    val done = java.util.concurrent.atomic.AtomicInteger()
-                    val total = batches.size + if (pack?.scenarios.isNullOrEmpty()) 1 else 0
-                    setProgress(job.id, PrepProgress("Writing interview questions… 0 of $total parts"))
-                    val parts = batches.map { cats ->
-                        async {
+                val jobsToRun = buildList {
+                    if (needTopics) add(async {
+                        runCatching { limiter.withPermit { packAgent.buildCore(job, description, profile) } }
+                            .onSuccess { core -> merge { it.copy(roleSummary = core.roleSummary, prepTopics = core.prepTopics) } }
+                            .onFailure { fail(it, "Prep topics") }
+                        tick()
+                    })
+                    batches.forEach { cats ->
+                        add(async {
                             runCatching { limiter.withPermit { packAgent.buildQuestions(job, description, profile, panel, cats) } }
-                                .onSuccess { qs ->
-                                    _packs.update { m -> m[job.id]?.let { p -> m + (job.id to p.copy(questions = p.questions + qs)) } ?: m }
-                                }
+                                .onSuccess { qs -> merge { it.copy(questions = it.questions + qs) } }
                                 .onFailure { fail(it, "Questions") }
-                            setProgress(job.id, PrepProgress("Writing interview questions… ${done.incrementAndGet()} of $total parts"))
-                        }
-                    } + listOfNotNull(
-                        if (pack?.scenarios.isNullOrEmpty()) {
-                            async {
-                                runCatching { limiter.withPermit { packAgent.buildScenarios(job, description, profile, panel) } }
-                                    .onSuccess { sc -> _packs.update { m -> m[job.id]?.let { p -> m + (job.id to p.copy(scenarios = sc)) } ?: m } }
-                                    .onFailure { fail(it, "Scenarios") }
-                                setProgress(job.id, PrepProgress("Writing interview questions… ${done.incrementAndGet()} of $total parts"))
+                            tick()
+                        })
+                    }
+                    if (needScenarios) add(async {
+                        runCatching { limiter.withPermit { packAgent.buildScenarios(job, description, profile, panel) } }
+                            .onSuccess { sc -> merge { it.copy(scenarios = sc) } }
+                            .onFailure { fail(it, "Scenarios") }
+                        tick()
+                    })
+                    if (needBrief) add(async {
+                        runCatching { limiter.withPermit { strategyAgent.analyse(job, description, profile) } }
+                            .onSuccess { b ->
+                                _briefs.update { it + (job.id to b) }
+                                saveBriefRecord(job, b)
                             }
-                        } else {
-                            null
-                        },
-                    )
-                    parts.awaitAll()
+                            .onFailure { fail(it, "Brief") }
+                        tick()
+                    })
                 }
-
-                brief?.let { deferred ->
-                    runCatching { deferred.await() }
-                        .onSuccess { b ->
-                            _briefs.update { it + (job.id to b) }
-                            saveBriefRecord(job, b)
-                        }
-                        .onFailure { fail(it, "Brief") }
-                }
+                jobsToRun.awaitAll()
             }
-            _packs.update { m ->
-                m[job.id]?.let { p ->
-                    val categories = p.questions.map { it.category }.toSet()
-                    m + (job.id to p.copy(complete = QuestionCategory.PACK.all { it in categories } && p.scenarios.isNotEmpty()))
-                } ?: m
+            merge { p ->
+                val categories = p.questions.map { it.category }.toSet()
+                p.copy(complete = QuestionCategory.PACK.all { it in categories } && p.scenarios.isNotEmpty() && p.prepTopics.isNotEmpty())
             }
             persist()
             setProgress(job.id, PrepProgress(error = errors.distinct().joinToString(" ").ifBlank { null }))
@@ -239,5 +243,7 @@ class RoleRepository(
 
     private companion object {
         const val MAX_ROLES = 12
+        const val ADVERT_TIMEOUT_MS = 12_000L
+        const val RESEARCH_TIMEOUT_MS = 8_000L
     }
 }

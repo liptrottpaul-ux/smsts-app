@@ -1,6 +1,9 @@
 package uk.co.asmcoach.ui.prep
 
 import androidx.compose.foundation.layout.Arrangement
+import uk.co.asmcoach.ui.theme.ChartColors
+import uk.co.asmcoach.ui.components.RingValue
+import uk.co.asmcoach.ui.components.ConcentricRings
 import uk.co.asmcoach.ui.theme.Gradients
 import uk.co.asmcoach.ui.strategy.ThinSourceCard
 import uk.co.asmcoach.ui.components.HeroCard
@@ -321,39 +324,44 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
 
 @Composable
 private fun ReadinessCard(r: Readiness, onInterview: () -> Unit) {
-    HeroCard(if (r.percent >= 80) Gradients.green else Gradients.blue) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                HeroBadge("Interview readiness")
-                Spacer(Modifier.height(8.dp))
-                Text(r.verdict, style = MaterialTheme.typography.headlineSmall, color = Color.White)
-                r.lastOfferLikelihood?.let {
-                    Text("Last mock: ${r.lastInterviewScore}/100 · offer chance $it%", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
-                }
-            }
-            ScoreRing(r.percent, size = 92.dp, stroke = 9.dp, caption = "ready", onHero = true)
-        }
+    HeroCard(Gradients.night) {
+        HeroBadge("Interview readiness")
+        Spacer(Modifier.height(6.dp))
+        Text(r.verdict, style = MaterialTheme.typography.headlineSmall, color = Color.White)
         Spacer(Modifier.height(14.dp))
-        ReadinessBar(
-            "Questions practised",
-            "${r.questionsPractised}/${r.questionsTotal}" + if (r.questionsPractised > 0) " · avg ${"%.1f".format(r.averageScore)}/5" else "",
-            r.questionsPractised.toFloat() / r.questionsTotal.coerceAtLeast(1) * (r.averageScore.toFloat() / 5f).coerceAtLeast(0.2f),
+        ConcentricRings(
+            rings = listOf(
+                RingValue(
+                    r.questionsPractised.toFloat() / r.questionsTotal.coerceAtLeast(1) * (r.averageScore.toFloat() / 5f).coerceAtLeast(0.2f),
+                    ChartColors.coral, "Answers practised",
+                    "${r.questionsPractised}/${r.questionsTotal}" + if (r.questionsPractised > 0) " · ${"%.1f".format(r.averageScore)}" else "",
+                ),
+                RingValue(r.topicsReviewed.toFloat() / r.topicsTotal.coerceAtLeast(1), ChartColors.teal, "Topics", "${r.topicsReviewed}/${r.topicsTotal}"),
+                RingValue(r.checklistDone.toFloat() / r.checklistTotal.coerceAtLeast(1), ChartColors.olive, "Prep steps", "${r.checklistDone}/${r.checklistTotal}"),
+                RingValue((r.lastInterviewScore ?: 0) / 100f, ChartColors.sage, "Mock interview", r.lastInterviewScore?.let { "$it/100" } ?: "—"),
+            ),
+            centre = "${r.percent}%",
+            centreCaption = "ready",
+            size = 140.dp,
+            stroke = 10.dp,
+            onHero = true,
         )
-        ReadinessBar("Prep topics reviewed", "${r.topicsReviewed}/${r.topicsTotal}", r.topicsReviewed.toFloat() / r.topicsTotal.coerceAtLeast(1))
-        ReadinessBar("Preparation steps", "${r.checklistDone}/${r.checklistTotal}", r.checklistDone.toFloat() / r.checklistTotal.coerceAtLeast(1))
-        ReadinessBar("Mock interview", r.lastInterviewScore?.let { "$it/100" } ?: "not done", (r.lastInterviewScore ?: 0) / 100f)
+        r.lastOfferLikelihood?.let {
+            Spacer(Modifier.height(10.dp))
+            Text("Last mock: offer chance $it%", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+        }
         if (r.nextSteps.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Text("Do next", style = MaterialTheme.typography.titleSmall, color = Color.White)
             Spacer(Modifier.height(6.dp))
-            Bullets(r.nextSteps.take(3), dotColor = Color.White, textColor = Color.White)
+            Bullets(r.nextSteps.take(3), dotColor = ChartColors.teal, textColor = Color.White)
         }
         if (r.percent >= 50) {
             Spacer(Modifier.height(12.dp))
             Text(
                 "Start mock interview →",
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                color = ChartColors.teal,
                 modifier = Modifier.clickable(onClick = onInterview).padding(vertical = 6.dp),
             )
         }

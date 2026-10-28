@@ -19,7 +19,6 @@ class RolePackAgent(private val gemini: GeminiClient) {
     @Serializable
     data class Core(
         val roleSummary: String = "",
-        val panel: List<PanelMember> = emptyList(),
         val prepTopics: List<PrepTopic> = emptyList(),
     )
 
@@ -31,10 +30,10 @@ class RolePackAgent(private val gemini: GeminiClient) {
 
     suspend fun buildCore(job: JobListing, description: String, profile: CandidateProfile): Core {
         val core = gemini.generateStructured(
-            Core.serializer(), SYSTEM, vacancy(job, description, profile) + CORE_SCHEMA, temperature = 0.6f, fast = true,
+            Core.serializer(), SYSTEM, vacancy(job, description, profile) + CORE_SCHEMA, temperature = 0.6f, fast = true, lite = true,
         )
-        require(core.panel.isNotEmpty()) { "The panel didn't come back. Please try again." }
-        return core.copy(panel = core.panel.take(3), prepTopics = core.prepTopics.take(6))
+        require(core.prepTopics.isNotEmpty()) { "The prep topics didn't come back. Please try again." }
+        return core.copy(prepTopics = core.prepTopics.take(6))
     }
 
     /** Two questions per category in [categories], asked by members of the existing [panel]. */
@@ -52,7 +51,7 @@ class RolePackAgent(private val gemini: GeminiClient) {
             appendLine()
             appendLine(questionsSchema(categories))
         }
-        val result = gemini.generateStructured(Questions.serializer(), SYSTEM, prompt, temperature = 0.6f, fast = true)
+        val result = gemini.generateStructured(Questions.serializer(), SYSTEM, prompt, temperature = 0.6f, fast = true, lite = true)
         val seats = panel.size.coerceIn(1, 3)
         return result.questions.map { it.copy(askedBy = it.askedBy.coerceIn(0, seats - 1)) }
     }
@@ -65,7 +64,7 @@ class RolePackAgent(private val gemini: GeminiClient) {
             appendLine()
             appendLine(SCENARIO_SCHEMA)
         }
-        val result = gemini.generateStructured(Scenarios.serializer(), SYSTEM, prompt, temperature = 0.7f, fast = true)
+        val result = gemini.generateStructured(Scenarios.serializer(), SYSTEM, prompt, temperature = 0.7f, fast = true, lite = true)
         val seats = panel.size.coerceIn(1, 3)
         return result.scenarios.take(3).map { it.copy(askedBy = it.askedBy.coerceIn(0, seats - 1)) }
     }
@@ -103,11 +102,9 @@ class RolePackAgent(private val gemini: GeminiClient) {
             Return JSON:
             {
               "roleSummary": "2 sentences: what this employer needs from this ASM and what the project looks like",
-              "panel": [{"name": "fictional full name", "role": "job title typical for this employer",
-                         "focus": "what they probe", "voice": "male" | "female" (must match the name)}] (exactly 3, index 0 is the lead),
               "prepTopics": [{"title": "topic from THIS advert", "listingRef": "exact advert words it comes from (max 20 words)",
                               "whyItMatters": "1 sentence", "points": ["4 specific things to know or mention"],
-                              "sayThis": "60-80 word spoken talking point, first person"}] (5 topics)
+                              "sayThis": "50-70 word spoken talking point, first person"}] (5 topics)
             }
         """.trimIndent()
 
