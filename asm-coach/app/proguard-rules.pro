@@ -13,3 +13,6 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# sherpa-onnx: JNI looks up these classes and fields by name.
+-keep class com.k2fsa.sherpa.onnx.** { *; }

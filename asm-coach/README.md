@@ -17,13 +17,23 @@ The app is built around one flow: **find a real role → prepare for that role �
 | Need | Used | Cost |
 |---|---|---|
 | Speech-to-text | Android `SpeechRecognizer` (en-GB, continuous mode) | Free, on-device |
-| Text-to-speech | Android `TextToSpeech` (en-GB voices, a distinct pitch and rate per persona) | Free, on-device |
+| Text-to-speech | Downloadable neural British voices ([Piper](https://github.com/rhasspy/piper) models run by [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)), falling back to Android `TextToSpeech` en-GB voices matched to each interviewer's gender | Free, on-device |
 | AI agents | Gemini API via a Google AI Studio key | Free tier |
 | Job search | Reed Jobseeker API (recommended), Serper.dev (2,500 free queries) or Firecrawl (free credits) | Free |
 | Persistence | On-device DataStore, plus optional Firestore sync with anonymous auth | Free (Spark plan) |
 
 > **Model note:** Google has retired Gemini 1.5 Flash, so the default model is `gemini-2.5-flash`,
 > its free-tier successor. You can change the model in Settings.
+
+## Natural voices
+
+Settings → Natural voices downloads open-source Piper voices (about 70–80 MB each) that run on
+the phone with sherpa-onnx: a Northern English man, a pack of 8 British men, a pack of 6 British
+women, and Cori. Each interviewer gets a distinct person of the right gender; the phone's own voices
+are used until a pack is installed. Text is tidied for speech first (NHBC → "N H B C", £45k →
+"45 thousand pounds", RAMS → "rams") and sentences get short pauses. The build fetches the
+sherpa-onnx AAR from its GitHub release and checks its SHA-256. The Northern English and British
+men/women voices are trained on OpenSLR 83 (CC BY-SA 4.0); Cori's licence is in its model card.
 
 ## The agents
 
@@ -68,7 +78,7 @@ app/src/main/java/uk/co/asmcoach/
 │   ├── persist/      # SessionRepository (DataStore + Firestore sync)
 │   ├── settings/     # DataStore-backed keys, model and profile
 │   └── content/      # Offline masterclass curriculum
-├── voice/            # SpeechRecognizerManager, TextToSpeechManager
+├── voice/            # SpeechRecognizerManager, TextToSpeechManager, neural voices (NeuralVoices, NeuralSpeaker), SpeechText
 └── ui/
     ├── theme/        # Stone/obsidian/slate/amber tokens, iOS-style type ramp
     ├── components/   # Tonal cards, segmented control, accordion, read-aloud box, score ring

@@ -178,6 +178,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         val activePack = activePack()
         // The role panel exists as soon as a role is picked, even before its questions are written.
         val seats = buildSeats(pack.value?.takeIf { s.tailorToJob }, s.mode)
+        tts.warmUp(seats.map { it.style })
         plan = buildPlan(activePack, seats, s)
         planIndex = 0
         probesOnCurrent = 0
@@ -375,7 +376,7 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
                     }.getOrNull()
                 }
             }
-            tts.speakAndAwait(ACKS.random(), seat.style)
+            tts.speakAndAwait(nextAck(), seat.style)
             val reaction = ai.await()
             when {
                 reaction == null -> localProbe(current, thread)
@@ -559,6 +560,18 @@ class RoleplayViewModel(private val container: AppContainer) : ViewModel() {
         const val GENERAL = "general"
         private const val MAX_PROBES = 2
         private const val REACTION_TIMEOUT_MS = 4_000L
-        private val ACKS = listOf("Okay.", "Right.", "Okay, thanks.", "Mm, right.", "Okay. Let me just note that.", "Right, okay.")
+        private val ACKS = listOf(
+            "Okay.", "Right.", "Okay, thanks.", "Mm, right.", "Okay. Let me just note that.", "Right, okay.",
+            "Okay, that's helpful.", "Fair enough.", "Thanks for that.", "Right, I see.", "Okay, good.", "Mm-hm.",
+        )
     }
+
+    private val lastAcks = ArrayDeque<String>()
+
+    /** A short spoken acknowledgement, never one of the last few used, as a real interviewer varies it. */
+    private fun nextAck(): String =
+        ACKS.filterNot { it in lastAcks }.random().also {
+            lastAcks.addLast(it)
+            if (lastAcks.size > 4) lastAcks.removeFirst()
+        }
 }

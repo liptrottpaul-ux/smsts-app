@@ -7,6 +7,12 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,10 +69,16 @@ object VoiceCatalog {
 }
 
 /**
- * Wraps Android's TextToSpeech engine: British English voices matched to each speaker's gender,
- * natural (network) voices preferred when online, long-text chunking and suspend-until-finished.
+ * Speaks for the app. Downloaded neural voices ([NeuralSpeaker]) are used when installed; otherwise
+ * Android's TextToSpeech engine, with British English voices matched to each speaker's gender and
+ * natural (network) voices preferred when online. Text is tidied for speech ([SpeechText]) and
+ * sentences get short pauses, so both engines sound less like reading.
  */
-class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
+class TextToSpeechManager(
+    context: Context,
+    private val store: NeuralVoiceStore,
+    private val neural: NeuralSpeaker,
+) : TextToSpeech.OnInitListener {
 
     private val appContext = context.applicationContext
     private val tts = TextToSpeech(appContext, this)
@@ -87,6 +99,15 @@ class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
     }
 
     private var voices: List<Entry> = emptyList()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    @Volatile
+    private var neuralJob: Job? = null
+
+    /** Set if the neural engine fails on this phone; the system voices take over. */
+    @Volatile
+    private var neuralBroken = false
 
     @Volatile
     var baseRate: Float = 1f
@@ -156,37 +177,91 @@ class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
         VoiceGender.Unknown -> 1f
     }
 
+    /** The downloaded neural voice for [style], or null to use the system engine. */
+    private fun neuralVoice(style: VoiceStyle): NeuralVoice? =
+        if (neuralBroken) null else NeuralCatalog.choose(store.installed, style.gender, style.slot)
+
+    /** Whether downloaded natural voices will be used. */
+    val usesNeural: Boolean get() = !neuralBroken && store.installed.isNotEmpty()
+
+    /** Loads the voices for these speakers ahead of time (e.g. when an interview starts). */
+    fun warmUp(styles: List<VoiceStyle>) = neural.warmUp(styles.mapNotNull { neuralVoice(it) })
+
     /** Fire-and-forget playback. Replaces anything currently speaking. */
     fun speak(text: String, id: String, style: VoiceStyle = VoiceStyle.Narrator) {
-        if (!_ready.value || text.isBlank()) return
+        if (text.isBlank()) return
         stop()
+        start(text, id, style)
+    }
+
+    private fun start(text: String, id: String, style: VoiceStyle) {
+        val sentences = SpeechText.sentences(SpeechText.forSpeech(text))
+        val voice = neuralVoice(style)
+        if (voice != null) {
+            _speakingId.value = id
+            neuralJob = scope.launch {
+                try {
+                    neural.speak(sentences, voice, style.rate * baseRate)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    // Native engine unavailable on this phone: fall back for good, and say this line now.
+                    neuralBroken = true
+                    if (_ready.value) return@launch speakSystem(sentences, id, style)
+                } finally {
+                    finishNeural(id)
+                }
+            }
+            return
+        }
+        if (!_ready.value) return resolve(id)
+        speakSystem(sentences, id, style)
+    }
+
+    private fun finishNeural(id: String) {
+        // A system-engine fallback for this line resolves through the utterance listener instead.
+        if (systemSpeaking == id) return
+        if (_speakingId.value == id) _speakingId.value = null
+        resolve(id)
+    }
+
+    @Volatile
+    private var systemSpeaking: String? = null
+
+    private fun speakSystem(sentences: List<String>, id: String, style: VoiceStyle) {
         val (voice, pitch) = choose(style)
         voice?.let { tts.setVoice(it) }
         tts.setPitch(pitch)
         tts.setSpeechRate(style.rate * baseRate)
-        val chunks = chunk(text)
-        chunks.forEachIndexed { index, part ->
-            val utteranceId = if (index == chunks.lastIndex) "$id$LAST" else "$id#$index"
+        val parts = sentences.flatMap { chunk(it) }.ifEmpty { return resolve(id) }
+        systemSpeaking = id
+        parts.forEachIndexed { index, part ->
+            if (index > 0) tts.playSilentUtterance(SENTENCE_PAUSE_MS, TextToSpeech.QUEUE_ADD, "$id#p$index")
+            val utteranceId = if (index == parts.lastIndex) "$id$LAST" else "$id#$index"
             tts.speak(part, TextToSpeech.QUEUE_ADD, null, utteranceId)
         }
     }
 
-    /** Speaks and suspends until playback finishes, is stopped, or the engine is unavailable. */
+    /** Speaks and suspends until playback finishes, is stopped, or no engine is available. */
     suspend fun speakAndAwait(text: String, style: VoiceStyle = VoiceStyle.Narrator) {
         if (text.isBlank()) return
-        withTimeoutOrNull(4_000) { _ready.first { it } } ?: return
+        if (neuralVoice(style) == null) withTimeoutOrNull(4_000) { _ready.first { it } } ?: return
         val id = UUID.randomUUID().toString()
+        stop()
         suspendCancellableCoroutine<Unit> { cont ->
-            speak(text, id, style)
             waiters[id] = cont
             cont.invokeOnCancellation {
                 waiters.remove(id)
-                if (_speakingId.value == id) tts.stop()
+                if (_speakingId.value == id) stop()
             }
+            start(text, id, style)
         }
     }
 
     fun stop() {
+        neuralJob?.cancel()
+        neuralJob = null
+        systemSpeaking = null
         tts.stop()
         _speakingId.value = null
         val pending = waiters.keys.toList()
@@ -223,6 +298,7 @@ class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
         private fun finish(utteranceId: String?) {
             val group = groupOf(utteranceId) ?: return
             if (_speakingId.value == group) _speakingId.value = null
+            if (systemSpeaking == group) systemSpeaking = null
             resolve(group)
         }
     }
@@ -249,5 +325,6 @@ class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
 
     private companion object {
         const val LAST = "#last"
+        const val SENTENCE_PAUSE_MS = 220L
     }
 }

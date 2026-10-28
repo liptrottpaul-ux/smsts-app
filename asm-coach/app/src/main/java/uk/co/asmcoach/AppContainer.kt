@@ -19,6 +19,8 @@ import uk.co.asmcoach.data.remote.UpdateChecker
 import uk.co.asmcoach.data.repo.JobRepository
 import uk.co.asmcoach.data.repo.RoleRepository
 import uk.co.asmcoach.data.settings.SettingsRepository
+import uk.co.asmcoach.voice.NeuralSpeaker
+import uk.co.asmcoach.voice.NeuralVoiceStore
 import uk.co.asmcoach.voice.TextToSpeechManager
 
 /** Manual dependency graph: small enough that a DI framework would only add build time. */
@@ -39,7 +41,8 @@ class AppContainer(val app: Context) {
     val coachAgent = CoachAgent(gemini)
     val interviewAgent = InterviewAgent(gemini)
     val sessions = SessionRepository(app, FirestoreSync.createIfAvailable(app))
-    val tts = TextToSpeechManager(app)
+    val voicePacks = NeuralVoiceStore(app, http)
+    val tts = TextToSpeechManager(app, voicePacks, NeuralSpeaker(voicePacks))
     val roles = RoleRepository(app, jobs, strategyAgent, RolePackAgent(gemini), settings, sessions)
     val updates = UpdateChecker(http)
     val practice = PracticeStore(app)

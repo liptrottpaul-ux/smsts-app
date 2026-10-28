@@ -11,3 +11,5 @@ app/google-services.json
 *.keystore
 *.jks
 !app/debug.keystore
+app/libs/*.aar
+app/libs/*.part

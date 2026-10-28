@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.data.model.InterviewMode
 import uk.co.asmcoach.ui.roleplay.buildSeats
+import uk.co.asmcoach.voice.VoicePack
 
 sealed interface UpdateStatus {
     data object Idle : UpdateStatus
@@ -103,13 +104,23 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     val voices = container.tts.summary
+    val voicePacks = container.voicePacks.states
+
+    fun downloadVoices(packs: List<VoicePack>) = container.voicePacks.download(packs)
+
+    fun deleteVoice(pack: VoicePack) {
+        container.tts.stop()
+        container.voicePacks.delete(pack)
+    }
 
     /** Plays the default panel, one line each, so the user can hear the voices are distinct and matched. */
     fun previewVoice() {
         container.tts.baseRate = _form.value.speechRate
         container.tts.refreshVoices()
+        val seats = buildSeats(null, InterviewMode.StandardPanel)
+        container.tts.warmUp(seats.map { it.style })
         viewModelScope.launch {
-            buildSeats(null, InterviewMode.StandardPanel).forEach { seat ->
+            seats.forEach { seat ->
                 container.tts.speakAndAwait("Hello, I'm ${seat.name}, ${seat.role}.", seat.style)
             }
         }

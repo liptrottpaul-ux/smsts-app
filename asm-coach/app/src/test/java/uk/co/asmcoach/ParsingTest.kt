@@ -192,4 +192,25 @@ class ParsingTest {
         assertEquals("Acme Build", uk.co.asmcoach.data.repo.ListingParser.company("Assistant Site Manager\nCompany: Acme Build\nLocation: Bolton"))
         assertEquals(null, uk.co.asmcoach.data.repo.ListingParser.company("our client is a leading housebuilder"))
     }
+
+    @Test
+    fun speechTextReadsLikeSpeech() {
+        val t = uk.co.asmcoach.voice.SpeechText
+        assertEquals("N H B C key stages and health and safety, for example, scaffold checks.", t.forSpeech("NHBC key stages & H&S (e.g. scaffold checks)."))
+        assertEquals("A S M's earn 45 thousand pounds on a 30, 60, 90 day plan.", t.forSpeech("ASMs earn £45k on a 30-60-90 day plan."))
+        assertEquals("Check the rams and cosh sheets.", t.forSpeech("Check the RAMS and COSHH sheets."))
+        assertEquals(listOf("Okay.", "Tell me about a time you led trades.", "What happened?"), t.sentences("Okay. Tell me about a time you led trades.\nWhat happened?"))
+    }
+
+    @Test
+    fun neuralVoicesMatchGenderAndSlot() {
+        val cat = uk.co.asmcoach.voice.NeuralCatalog
+        val all = uk.co.asmcoach.voice.VoicePack.entries.toSet()
+        val male0 = cat.choose(all, uk.co.asmcoach.voice.VoiceGender.Male, 0)!!
+        val male1 = cat.choose(all, uk.co.asmcoach.voice.VoiceGender.Male, 1)!!
+        assertEquals(uk.co.asmcoach.voice.VoicePack.NorthernMan, male0.pack)
+        assertEquals(true, male0 != male1 && male1.gender == uk.co.asmcoach.voice.VoiceGender.Male)
+        assertEquals(uk.co.asmcoach.voice.VoiceGender.Female, cat.choose(all, uk.co.asmcoach.voice.VoiceGender.Female, 0)!!.gender)
+        assertEquals(null, cat.choose(setOf(uk.co.asmcoach.voice.VoicePack.Cori), uk.co.asmcoach.voice.VoiceGender.Male, 0))
+    }
 }

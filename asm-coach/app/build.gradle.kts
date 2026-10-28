@@ -19,6 +19,23 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// Offline neural voices (sherpa-onnx running Piper models). The ~38 MB AAR is fetched once from
+// the official release and checked against a known hash rather than committed to git.
+val sherpaVersion = "1.13.8"
+val sherpaSha256 = "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471"
+val sherpaAar = file("libs/sherpa-onnx-$sherpaVersion.aar")
+if (!sherpaAar.exists()) {
+    sherpaAar.parentFile.mkdirs()
+    val part = file("${sherpaAar.path}.part")
+    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaVersion/" +
+        "sherpa-onnx-static-link-onnxruntime-$sherpaVersion.aar"
+    uri(url).toURL().openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
+    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(part.readBytes())
+        .joinToString("") { "%02x".format(it) }
+    check(digest == sherpaSha256) { "sherpa-onnx AAR checksum mismatch: $digest" }
+    part.renameTo(sherpaAar)
+}
+
 fun secret(name: String): String =
     (localProps.getProperty(name) ?: System.getenv(name) ?: "").trim().replace("\"", "")
 
@@ -40,6 +57,9 @@ android {
         buildConfigField("String", "SERPER_API_KEY", "\"${secret("SERPER_API_KEY")}\"")
         buildConfigField("String", "FIRECRAWL_API_KEY", "\"${secret("FIRECRAWL_API_KEY")}\"")
         buildConfigField("boolean", "FIREBASE_CONFIGURED", hasGoogleServices.toString())
+
+        // Phones only: the neural voice engine is native code, and x86 builds would double its size.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     // A committed debug keystore keeps the signature identical across CI builds, so a new APK
@@ -80,6 +100,8 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // Compress native libraries in the APK (the voice engine is large); Android extracts them on install.
+        jniLibs { useLegacyPackaging = true }
     }
 }
 
@@ -107,6 +129,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation(files(sherpaAar))
+    implementation(libs.commons.compress)
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore)

@@ -64,6 +64,7 @@ import uk.co.asmcoach.ui.components.IosScreen
 import uk.co.asmcoach.ui.components.NavTextButton
 import uk.co.asmcoach.ui.theme.switchOff
 import uk.co.asmcoach.ui.components.CircleIconButton
+import uk.co.asmcoach.ui.components.MeterBar
 import uk.co.asmcoach.ui.components.PillBadge
 import uk.co.asmcoach.ui.components.PrimaryButton
 import uk.co.asmcoach.ui.components.SecondaryButton
@@ -71,6 +72,8 @@ import uk.co.asmcoach.ui.components.SectionLabel
 import uk.co.asmcoach.ui.components.SurfaceCard
 import uk.co.asmcoach.ui.containerViewModel
 import uk.co.asmcoach.ui.theme.AsmTheme
+import uk.co.asmcoach.voice.PackState
+import uk.co.asmcoach.voice.VoicePack
 
 @Composable
 fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
@@ -78,6 +81,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     val form by vm.form.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     val voices by vm.voices.collectAsStateWithLifecycle()
+    val packs by vm.voicePacks.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // Pick up voices installed while the user was in Android's settings.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshVoices() }
@@ -193,7 +197,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (voices.hasBoth) c.good else c.warn,
                 )
-                if (!voices.hasBoth || voices.online == 0) {
+                if (packs.values.none { it == PackState.Installed } && (!voices.hasBoth || voices.online == 0)) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "For natural, gender-matched interviewers: open Text-to-speech settings, choose " +
@@ -216,6 +220,9 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                 }
             }
         }
+
+        item { SectionLabel("Natural voices") }
+        item { NaturalVoicesCard(packs, onDownload = vm::downloadVoices, onDelete = vm::deleteVoice, onPreview = vm::previewVoice) }
 
         item { SectionLabel("App updates") }
         item {
@@ -353,4 +360,78 @@ private fun LinkText(text: String, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(vertical = 4.dp),
     )
+}
+
+/**
+ * Downloadable neural voices: far more human than the phone's built-in voices, offline and free.
+ * Each pack is a one-off download; the panel uses them automatically once installed.
+ */
+@Composable
+private fun NaturalVoicesCard(
+    packs: Map<VoicePack, PackState>,
+    onDownload: (List<VoicePack>) -> Unit,
+    onDelete: (VoicePack) -> Unit,
+    onPreview: () -> Unit,
+) {
+    val c = AsmTheme.colors
+    val installed = packs.filterValues { it == PackState.Installed }.keys
+    val recommended = VoicePack.entries.filter { it.recommended && it !in installed }
+    SurfaceCard {
+        Text(
+            if (installed.isEmpty()) "Make the panel sound like real people" else "Natural voices are on",
+            style = MaterialTheme.typography.titleSmall,
+            color = c.textPrimary,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Human-sounding British voices that run on your phone: free, no internet needed once " +
+                "downloaded, and a different person for each interviewer. Best downloaded on Wi-Fi.",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.textSecondary,
+        )
+        if (recommended.isNotEmpty() && recommended.none { packs[it] is PackState.Downloading }) {
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton(
+                "Download the panel voices (${recommended.sumOf { it.sizeMb }} MB)",
+                onClick = { onDownload(recommended) },
+                icon = Icons.Rounded.Download,
+            )
+        }
+        VoicePack.entries.forEach { pack ->
+            val state = packs[pack] ?: PackState.Missing
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(pack.title, style = MaterialTheme.typography.bodyLarge, color = c.textPrimary)
+                    Text(
+                        when (state) {
+                            PackState.Installed -> "${pack.detail} · installed"
+                            is PackState.Downloading -> "Downloading… ${(state.fraction * 100).toInt()}%"
+                            is PackState.Failed -> state.message
+                            PackState.Missing -> "${pack.detail} · ${pack.sizeMb} MB"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when (state) {
+                            PackState.Installed -> c.good
+                            is PackState.Failed -> c.bad
+                            else -> c.textSecondary
+                        },
+                    )
+                }
+                when (state) {
+                    PackState.Installed -> NavTextButton("Remove", { onDelete(pack) })
+                    is PackState.Downloading -> Unit
+                    else -> NavTextButton(if (state is PackState.Failed) "Retry" else "Get", { onDownload(listOf(pack)) }, prominent = true)
+                }
+            }
+            if (state is PackState.Downloading) {
+                Spacer(Modifier.height(6.dp))
+                MeterBar(state.fraction, c.accent, Modifier.fillMaxWidth())
+            }
+        }
+        if (installed.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            SecondaryButton("Hear the panel", onClick = onPreview, icon = Icons.AutoMirrored.Rounded.VolumeUp)
+        }
+    }
 }
