@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -30,7 +31,7 @@ if (!sherpaAar.exists()) {
     val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaVersion/" +
         "sherpa-onnx-static-link-onnxruntime-$sherpaVersion.aar"
     uri(url).toURL().openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
-    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(part.readBytes())
+    val digest = MessageDigest.getInstance("SHA-256").digest(part.readBytes())
         .joinToString("") { "%02x".format(it) }
     check(digest == sherpaSha256) { "sherpa-onnx AAR checksum mismatch: $digest" }
     part.renameTo(sherpaAar)
