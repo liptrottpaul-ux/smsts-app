@@ -38,6 +38,8 @@ class JobsViewModel(private val container: AppContainer) : ViewModel() {
     val packs = container.roles.packs
 
     val updates = container.updates
+    val currentRole = container.roles.job
+    val practice = container.practice.data
 
     init {
         // Quietly look for a newer build; failures (offline, rate limit) are ignored.

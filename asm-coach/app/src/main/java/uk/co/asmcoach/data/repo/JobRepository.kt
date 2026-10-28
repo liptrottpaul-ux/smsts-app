@@ -5,6 +5,12 @@ import uk.co.asmcoach.data.model.SearchRegion
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import uk.co.asmcoach.data.remote.AppJson
 import uk.co.asmcoach.data.remote.FirecrawlClient
 import uk.co.asmcoach.data.remote.PageFetcher
 import uk.co.asmcoach.data.remote.ReedClient
@@ -73,16 +79,47 @@ class JobRepository(
         }
     }
 
-    /** Full listing text: Reed's job API, else Firecrawl, else the search snippet. */
-    suspend fun fullDescription(job: JobListing): String {
-        if (job.isSample) return job.snippet
+    /**
+     * The fullest version of the advert we can get, in order: Reed's API, the page's own
+     * JobPosting structured data (most boards embed it), Firecrawl, readable page text, and
+     * finally the search snippet. [ListingDetails.source] says which one was used.
+     */
+    suspend fun details(job: JobListing): ListingDetails {
+        if (job.isSample) return ListingDetails(job.snippet, "sample listing", job.company)
         val s = settings.current()
-        val full = when {
-            job.reedJobId != null && s.reedKey.isNotBlank() ->
-                runCatching { reed.details(s.reedKey, job.reedJobId) }.getOrNull()
-            s.firecrawlKey.isNotBlank() -> runCatching { firecrawl.scrape(s.firecrawlKey, job.url) }.getOrNull()
-            else -> null
+        if (job.reedJobId != null && s.reedKey.isNotBlank()) {
+            runCatching { reed.details(s.reedKey, job.reedJobId) }.getOrNull()
+                ?.takeIf { it.length > 400 }
+                ?.let { return ListingDetails(it.take(MAX_TEXT), "full advert (Reed)", job.company) }
         }
+        val html = pages.html(job.url)
+        html?.let { ListingParser.jobPosting(it) }?.takeIf { it.text.length > 400 }?.let { posting ->
+            return posting.copy(text = posting.text.take(MAX_TEXT), company = posting.company ?: job.company)
+        }
+        if (s.firecrawlKey.isNotBlank()) {
+            runCatching { firecrawl.scrape(s.firecrawlKey, job.url, maxChars = MAX_TEXT) }.getOrNull()
+                ?.takeIf { it.length > 400 }
+                ?.let { return ListingDetails(it, "full advert (Firecrawl)", job.company) }
+        }
+        html?.let { ListingParser.pageText(it) }?.takeIf { it.length > 600 }?.let {
+            return ListingDetails(it.take(MAX_TEXT), "advert page text", job.company)
+        }
+        return ListingDetails(job.snippet, "search snippet only", job.company)
+    }
+
+    suspend fun fullDescription(job: JobListing): String = details(job).text
+
+    /** Web results about the employer (recent projects, sector, values) to make prep specific. */
+    suspend fun employerResearch(company: String?, location: String?): List<String> {
+        val name = company?.trim()?.takeIf { it.length > 2 && !it.contains("sample", ignoreCase = true) && !it.equals("Not stated", true) }
+            ?: return emptyList()
+        val key = settings.current().serperKey.takeIf { it.isNotBlank() } ?: return emptyList()
+        val query = "\"$name\" construction projects ${location ?: "North West"} news"
+        return runCatching { serper.search(key, query, pastWeekOnly = false) }.getOrDefault(emptyList())
+            .filter { it.snippet.isNotBlank() }
+            .take(6)
+            .map { "${it.title}: ${it.snippet}" }
+    }
         return full?.takeIf { it.length > job.snippet.length }?.take(12_000) ?: job.snippet
     }
 
@@ -155,6 +192,7 @@ class JobRepository(
         .ifBlank { "Assistant Site Manager" }
 
     companion object {
+        private const val MAX_TEXT = 14_000
         private const val KEYWORDS = "assistant site manager"
         private val RELEVANT = Regex("(?i)site manager|site supervisor|assistant site|construction manager")
         private val REED_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy")
@@ -217,6 +255,15 @@ class JobRepository(
     }
 }
 
+/** The advert text used to build a role, and where it came from (shown to the user). */
+data class ListingDetails(
+    val text: String,
+    val source: String,
+    val company: String? = null,
+    val location: String? = null,
+    val salary: String? = null,
+)
+
 /** Small, testable heuristics for pulling structure out of search-result text. */
 object ListingParser {
     private val towns = listOf(
@@ -230,6 +277,48 @@ object ListingParser {
         Regex("£\\s?\\d[\\d,.]*k?(?:\\s*(?:-|–|to)\\s*£?\\s?\\d[\\d,.]*k?)?(?:\\s*(?:per annum|a year|p\\.?a\\.?))?", RegexOption.IGNORE_CASE)
 
     data class Vacancy(val title: String, val url: String, val context: String)
+
+    private val ldJson = Regex("<script[^>]*application/ld\\+json[^>]*>(.*?)</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
+    /** Reads schema.org JobPosting data, which Reed, Totaljobs, CV-Library and Indeed embed in job pages. */
+    fun jobPosting(html: String): ListingDetails? {
+        for (m in ldJson.findAll(html)) {
+            val root = runCatching { AppJson.parseToJsonElement(m.groupValues[1].trim()) }.getOrNull() ?: continue
+            val posting = findPosting(root) ?: continue
+            val text = htmlToText(htmlToText(posting.str("description") ?: continue))
+            val company = (posting["hiringOrganization"] as? JsonObject)?.str("name")
+            val address = ((posting["jobLocation"] as? JsonObject) ?: (posting["jobLocation"] as? JsonArray)?.firstOrNull() as? JsonObject)
+                ?.let { it["address"] as? JsonObject }
+            val location = address?.str("addressLocality") ?: address?.str("addressRegion")
+            val salary = (posting["baseSalary"] as? JsonObject)?.let { base ->
+                val value = base["value"] as? JsonObject
+                val min = value?.str("minValue") ?: value?.str("value")
+                val max = value?.str("maxValue")
+                listOfNotNull(min, max).joinToString(" – ") { "£$it" }.ifBlank { null }
+            }
+            val title = posting.str("title")
+            val header = listOfNotNull(title, company, location, salary).joinToString(" | ")
+            return ListingDetails("$header\n\n$text", "full advert (job page)", company, location, salary)
+        }
+        return null
+    }
+
+    private fun findPosting(e: JsonElement): JsonObject? = when (e) {
+        is JsonObject -> when {
+            e.str("@type")?.equals("JobPosting", ignoreCase = true) == true -> e
+            e["@graph"] != null -> findPosting(e["@graph"]!!)
+            else -> null
+        }
+        is JsonArray -> e.firstNotNullOfOrNull { findPosting(it) }
+        else -> null
+    }
+
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+    /** Readable text of a job page without scripts, styles and navigation. */
+    fun pageText(html: String): String = htmlToText(
+        html.replace(Regex("<(script|style|nav|header|footer|noscript|svg)[^>]*>.*?</\\1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), " "),
+    )
 
     private val relevantTitle = Regex("(?i)site|construction|manager|supervisor|foreman|build|assistant")
     private val markdownLink = Regex("\\[([^\\]]{6,160})\\]\\((https?://[^)\\s]+)[^)]*\\)")

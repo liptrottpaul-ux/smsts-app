@@ -88,10 +88,11 @@ private val OrangeDark = Color(0xFFFF9F0A)
 private val RedLight = Color(0xFFFF3B30)
 private val RedDark = Color(0xFFFF453A)
 
+// Grouped style (as in Health, Fitness, Settings): grey canvas, white cards, grey nested elements.
 val LightColors = AppColors(
-    background = Color(0xFFFFFFFF),
-    surface = Color(0xFFF2F2F7),
-    surfaceRaised = Color(0xFFFFFFFF),
+    background = Color(0xFFF2F2F7),
+    surface = Color(0xFFFFFFFF),
+    surfaceRaised = Color(0xFFF2F2F7),
     surfaceSunken = Color(0x1F767680),
     hairline = Color(0x4A3C3C43),
     textPrimary = Color(0xFF000000),
@@ -109,7 +110,7 @@ val LightColors = AppColors(
     warn = Color(0xFFC93400),
     bad = RedLight,
     gray = Color(0xFF8E8E93),
-    barMaterial = Color(0xE6F9F9F9),
+    barMaterial = Color(0xE6F2F2F7),
     isDark = false,
 )
 
@@ -137,6 +138,21 @@ val DarkColors = AppColors(
     barMaterial = Color(0xD91D1D1D),
     isDark = true,
 )
+
+/** Vivid gradients for hero cards, in the spirit of Fitness and Health summary tiles. */
+object Gradients {
+    val blue = listOf(Color(0xFF0A84FF), Color(0xFF5E5CE6))
+    val green = listOf(Color(0xFF30D158), Color(0xFF0FB5AE))
+    val orange = listOf(Color(0xFFFF9F0A), Color(0xFFFF375F))
+    val red = listOf(Color(0xFFFF453A), Color(0xFFBF2D5A))
+    val night = listOf(Color(0xFF1C1F2E), Color(0xFF2C2340))
+
+    fun forScore(score: Int) = when {
+        score >= 70 -> green
+        score >= 45 -> orange
+        else -> red
+    }
+}
 
 /** Toggle track colours (UISwitch). */
 val AppColors.switchOn: Color get() = if (isDark) GreenDark else GreenLight

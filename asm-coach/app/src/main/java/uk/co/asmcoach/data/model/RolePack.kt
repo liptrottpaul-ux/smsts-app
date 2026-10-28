@@ -9,6 +9,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class RolePack(
     val roleSummary: String = "",
+    /** What the pack was built from, e.g. "full advert (job page) · 1,240 words · 5 employer sources". */
+    val basedOn: String = "",
+    /** True when only a search snippet was available, so the prep is less specific. */
+    val thinSource: Boolean = false,
     val panel: List<PanelMember> = emptyList(),
     val prepTopics: List<PrepTopic> = emptyList(),
     val questions: List<BankQuestion> = emptyList(),
@@ -28,6 +32,8 @@ data class PanelMember(
 @Serializable
 data class PrepTopic(
     val title: String = "",
+    /** The exact advert line (or employer fact) this topic comes from. */
+    val listingRef: String = "",
     val whyItMatters: String = "",
     val points: List<String> = emptyList(),
     val sayThis: String = "",
@@ -38,6 +44,8 @@ data class BankQuestion(
     val category: String = "",
     val askedBy: Int = 0,
     val question: String = "",
+    /** The exact advert line (or employer fact) this question targets. */
+    val listingRef: String = "",
     val lookingFor: String = "",
     val modelAnswer: String = "",
     /** Follow-ups a real interviewer would use to dig into a thin answer. */

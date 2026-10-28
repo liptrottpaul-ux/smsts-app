@@ -2,6 +2,24 @@ package uk.co.asmcoach.ui.jobs
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import uk.co.asmcoach.ui.theme.Gradients
+import uk.co.asmcoach.ui.theme.ContinuousShape
+import uk.co.asmcoach.ui.prep.PrepViewModel
+import uk.co.asmcoach.ui.components.ScoreRing
+import uk.co.asmcoach.ui.components.HeroCard
+import uk.co.asmcoach.ui.components.HeroBadge
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -65,6 +83,8 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
     val briefs by vm.briefs.collectAsStateWithLifecycle()
     val packs by vm.packs.collectAsStateWithLifecycle()
     val latestBuild by vm.updates.latestBuild.collectAsStateWithLifecycle()
+    val currentRole by vm.currentRole.collectAsStateWithLifecycle()
+    val practice by vm.practice.collectAsStateWithLifecycle()
     val c = AsmTheme.colors
     val uri = LocalUriHandler.current
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -74,6 +94,12 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
         subtitle = "Pick a real role. The app prepares you for it, then interviews you for it.",
         trailing = { NavIconButton(Icons.Rounded.Settings, "Settings", onOpenSettings) },
     ) {
+        item {
+            val role = currentRole
+            val readiness = role?.let { r -> packs[r.id]?.let { PrepViewModel.readiness(r.id, it, practice).percent } }
+            PlanHero(role, readiness) { vm.select(role!!); onOpenStrategy() }
+        }
+
         if ((latestBuild ?: 0) > vm.updates.currentBuild) {
             item {
                 TonalCard(tint = c.tintSage, onClick = { uri.openUri(UpdateChecker.DOWNLOAD_URL) }, contentPadding = 14.dp) {
@@ -178,56 +204,119 @@ fun JobsScreen(container: AppContainer, onOpenStrategy: () -> Unit, onOpenSettin
 @Composable
 private fun JobCard(job: JobListing, brief: StrategyBrief?, ready: Boolean, expanding: Boolean, onClick: () -> Unit) {
     val c = AsmTheme.colors
-    TonalCard(tint = c.surface, border = !c.isDark, onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (job.isSearchPage) {
-                PillBadge("Several jobs", color = c.textSecondary, background = c.surfaceSunken)
-                Spacer(Modifier.width(6.dp))
+    val employer = job.company?.takeIf { it.isNotBlank() } ?: job.source
+    SurfaceCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.Top) {
+            EmployerBadge(employer)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(job.title, style = MaterialTheme.typography.titleMedium, color = c.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOfNotNull(job.company, job.source.takeIf { job.company == null }).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textSecondary,
+                    maxLines = 1,
+                )
             }
-            PillBadge(
-                job.source,
-                color = if (job.isSample) c.textSecondary else c.slate,
-                background = if (job.isSample) c.surfaceSunken else c.tintSlate,
-            )
-            job.location?.let {
+            if (brief != null) {
                 Spacer(Modifier.width(8.dp))
-                Text(it, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-            }
-            Spacer(Modifier.weight(1f))
-            AnimatedVisibility(brief != null) {
-                brief?.let {
-                    PillBadge(
-                        "${it.compatibilityScore}% fit",
-                        color = c.scoreColor(it.compatibilityScore),
-                        background = c.tintSage,
-                    )
-                }
+                ScoreRing(brief.compatibilityScore, size = 44.dp, stroke = 4.dp, caption = null)
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text(job.title, style = MaterialTheme.typography.titleMedium, color = c.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        job.company?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.textSecondary) }
-        Spacer(Modifier.height(6.dp))
-        Text(job.snippet, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            job.location?.let { MetaItem(Icons.Rounded.Place, it) }
+            job.salary?.let { MetaItem(Icons.Rounded.Payments, it) }
+            job.postedLabel?.let { MetaItem(Icons.Rounded.Schedule, it.removePrefix("Posted ")) }
+        }
+        if (job.snippet.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(job.snippet, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            job.salary?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = c.textPrimary) }
-            job.postedLabel?.let {
-                Spacer(Modifier.width(8.dp))
-                Text(it, style = MaterialTheme.typography.labelMedium, color = c.textTertiary)
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(c.hairline))
+        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            when {
+                job.isSearchPage -> PillBadge("Several jobs", color = c.slate, background = c.tintSlate)
+                ready -> PillBadge("Prep ready", color = c.good, background = c.tintSage)
+                job.isSample -> PillBadge("Sample", color = c.textSecondary, background = c.surfaceSunken)
+                else -> PillBadge(job.source, color = c.textSecondary, background = c.surfaceSunken)
             }
             Spacer(Modifier.weight(1f))
+            if (expanding) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = c.accent, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 when {
-                    expanding -> "Finding the jobs on this page…"
-                    job.isSearchPage -> "Show the jobs on this page"
-                    ready -> "Open role · ready"
-                    else -> "Prepare for this role"
+                    expanding -> "Finding jobs…"
+                    job.isSearchPage -> "Show jobs"
+                    ready -> "Open"
+                    else -> "Prepare"
                 },
                 style = MaterialTheme.typography.labelLarge,
                 color = c.accent,
             )
             Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = c.accent)
+        }
+    }
+}
+
+/** Employer initials on a coloured squircle, colour stable per employer. */
+@Composable
+private fun EmployerBadge(name: String) {
+    val palette = listOf(0xFF0A84FF, 0xFF5E5CE6, 0xFF30B0C7, 0xFFFF9F0A, 0xFF34C759, 0xFFFF375F, 0xFFAF52DE)
+    val color = Color(palette[(name.hashCode() and 0x7fffffff) % palette.size])
+    val initials = name.split(Regex("[\\s&]+")).filter { it.firstOrNull()?.isLetter() == true }.take(2).joinToString("") { it.take(1).uppercase() }
+    Box(
+        Modifier.size(44.dp).clip(ContinuousShape(11.dp)).background(Brush.linearGradient(listOf(color, color.copy(alpha = 0.75f)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.titleMedium, color = Color.White)
+    }
+}
+
+@Composable
+private fun MetaItem(icon: ImageVector, text: String) {
+    val c = AsmTheme.colors
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = c.gray, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = c.textSecondary, maxLines = 1)
+    }
+}
+
+/** Top of the Jobs tab: the 3-step routine, or the current role's readiness. */
+@Composable
+private fun PlanHero(role: JobListing?, readiness: Int?, onContinue: () -> Unit) {
+    HeroCard(Gradients.blue, onClick = if (role != null) onContinue else null) {
+        if (role == null) {
+            HeroBadge("Your 30-minute routine")
+            Spacer(Modifier.height(10.dp))
+            Text("Find a real role, prep for it, then rehearse the interview.", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("1 · Find", "2 · Prep", "3 · Interview").forEach { HeroBadge(it) }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    HeroBadge("Current role")
+                    Spacer(Modifier.height(8.dp))
+                    Text(role.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(role.company, role.location).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f),
+                    )
+                }
+                if (readiness != null) {
+                    Spacer(Modifier.width(12.dp))
+                    ScoreRing(readiness, size = 72.dp, stroke = 7.dp, caption = "ready", onHero = true)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("Continue →", style = MaterialTheme.typography.labelLarge, color = Color.White)
         }
     }
 }

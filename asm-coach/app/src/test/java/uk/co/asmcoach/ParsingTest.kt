@@ -141,4 +141,23 @@ class ParsingTest {
         assertEquals(listOf("Male", "Female", "Male"), seats.map { it.gender.name })
         assertEquals(listOf(0, 0, 1), seats.map { it.slot })
     }
+
+    @Test
+    fun `reads the full advert from JobPosting structured data`() {
+        val html = """
+            <html><head><script type="application/ld+json">
+            {"@context":"https://schema.org","@type":"JobPosting","title":"Assistant Site Manager",
+             "description":"&lt;p&gt;Join our &lt;b&gt;NHBC&lt;/b&gt; award-winning team on a 180-plot scheme in Warrington. You will manage trades, RAMS and key-stage inspections.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;SMSTS&lt;/li&gt;&lt;li&gt;First Aid&lt;/li&gt;&lt;/ul&gt;",
+             "hiringOrganization":{"@type":"Organization","name":"Acme Homes"},
+             "jobLocation":{"@type":"Place","address":{"addressLocality":"Warrington"}},
+             "baseSalary":{"value":{"minValue":42000,"maxValue":48000}}}
+            </script></head><body>nav</body></html>
+        """.trimIndent()
+        val d = ListingParser.jobPosting(html)!!
+        assertEquals("Acme Homes", d.company)
+        assertEquals("Warrington", d.location)
+        assertEquals(true, d.text.contains("180-plot scheme"))
+        assertEquals(true, d.text.contains("• SMSTS"))
+        assertEquals(false, d.text.contains("<b>"))
+    }
 }

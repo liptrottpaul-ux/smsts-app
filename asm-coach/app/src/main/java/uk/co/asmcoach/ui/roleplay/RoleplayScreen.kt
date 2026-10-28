@@ -15,6 +15,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import uk.co.asmcoach.ui.theme.Gradients
+import uk.co.asmcoach.ui.components.HeroCard
+import uk.co.asmcoach.ui.components.HeroBadge
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -477,14 +480,15 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
         }
 
         item {
-            TonalCard(tint = c.surface, contentPadding = 20.dp) {
+            HeroCard(Gradients.night, contentPadding = 22.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SeatAvatar(seat, size = 56, active = state.phase == Phase.Speaking)
                     Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(seat.name, style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-                        Text(seat.role, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                    Column(Modifier.weight(1f)) {
+                        Text(seat.name, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text(seat.role, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
                     }
+                    if (state.onFollowUp) HeroBadge("Follow-up")
                 }
                 Spacer(Modifier.height(18.dp))
                 AnimatedContent(
@@ -494,19 +498,24 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
                 ) { text ->
                     if (text == THINKING) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
+                            CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                             Spacer(Modifier.width(10.dp))
-                            Text("${seat.name} is making a note…", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
+                            Text("${seat.name} is making a note…", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.75f))
                         }
                     } else if (text == null) {
-                        Text("Waiting for the panel.", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
+                        Text("Waiting for the panel.", style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.75f))
                     } else {
-                        Text(text, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
+                        Text(text, style = MaterialTheme.typography.headlineSmall, color = Color.White)
                     }
                 }
                 if (state.phase == Phase.Speaking) {
                     Spacer(Modifier.height(14.dp))
-                    SecondaryButton("Skip to my answer", onClick = vm::skipQuestionAudio, icon = Icons.Rounded.SkipNext)
+                    Text(
+                        "Skip to my answer ›",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                        modifier = Modifier.clip(CircleShape).clickable(onClick = vm::skipQuestionAudio).padding(vertical = 8.dp),
+                    )
                 }
             }
         }
@@ -575,12 +584,14 @@ private fun LiveContent(state: RoleplayUiState, hasGemini: Boolean, vm: Roleplay
 private fun ListeningPanel(state: RoleplayUiState, vm: RoleplayViewModel) {
     val c = AsmTheme.colors
     val orb by animateFloatAsState(1f + state.micLevel * 0.35f, tween(120), label = "orb")
-    TonalCard(tint = c.tintAmber, contentPadding = 22.dp) {
+    SurfaceCard(contentPadding = 22.dp) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Waveform(state.micLevel)
+            Spacer(Modifier.height(14.dp))
             Box(contentAlignment = Alignment.Center) {
-                Box(Modifier.size(96.dp).scale(orb).clip(CircleShape).background(c.accent.copy(alpha = 0.22f)))
-                Box(Modifier.size(68.dp).clip(CircleShape).background(c.accent), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Mic, contentDescription = "Listening", tint = c.onAccent, modifier = Modifier.size(30.dp))
+                Box(Modifier.size(84.dp).scale(orb).clip(CircleShape).background(c.bad.copy(alpha = 0.18f)))
+                Box(Modifier.size(64.dp).clip(CircleShape).background(c.bad), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Mic, contentDescription = "Listening", tint = Color.White, modifier = Modifier.size(28.dp))
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -600,6 +611,21 @@ private fun ListeningPanel(state: RoleplayUiState, vm: RoleplayViewModel) {
                 color = c.accent,
                 modifier = Modifier.clip(CircleShape).clickable(onClick = vm::switchToTyping).padding(10.dp),
             )
+        }
+    }
+}
+
+/** Voice-memo style bars that move with the microphone level. */
+@Composable
+private fun Waveform(level: Float) {
+    val c = AsmTheme.colors
+    val transition = rememberInfiniteTransition(label = "wave")
+    val phase by transition.animateFloat(0f, 6.283f, infiniteRepeatable(tween(900)), label = "phase")
+    Row(Modifier.height(40.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(21) { i ->
+            val wave = (kotlin.math.sin(phase + i * 0.55f) + 1f) / 2f
+            val h = 6f + 34f * (0.15f + level.coerceIn(0f, 1f) * 0.85f) * (0.35f + 0.65f * wave)
+            Box(Modifier.width(4.dp).height(h.dp).clip(CircleShape).background(c.bad.copy(alpha = 0.55f + 0.45f * wave)))
         }
     }
 }
@@ -787,33 +813,32 @@ private fun ResultsContent(evaluation: Evaluation, speakingId: String?, vm: Role
 
 @Composable
 private fun OfferCard(evaluation: Evaluation) {
-    val c = AsmTheme.colors
     val likelihood = evaluation.offerLikelihood
-    TonalCard(tint = if (likelihood >= 60) c.tintSage else if (likelihood >= 35) c.tintAmber else c.tintRose) {
+    HeroCard(Gradients.forScore(likelihood)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ScoreRing(likelihood, size = 84.dp, stroke = 8.dp, caption = "%")
-            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text("Chance of an offer", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-                Text(evaluation.offerVerdict.ifBlank { "Offer likelihood" }, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
+                HeroBadge("Chance of an offer")
+                Spacer(Modifier.height(8.dp))
+                Text(evaluation.offerVerdict.ifBlank { "Offer likelihood" }, style = MaterialTheme.typography.headlineSmall, color = Color.White)
                 Text(
-                    "Against a typical shortlist for this role, on this performance.",
+                    "Against a typical shortlist, on this performance.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = c.textSecondary,
+                    color = Color.White.copy(alpha = 0.85f),
                 )
             }
+            ScoreRing(likelihood, size = 92.dp, stroke = 9.dp, caption = "%", onHero = true)
         }
         if (evaluation.likelihoodReasons.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
-            Text("Why", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Text("Why", style = MaterialTheme.typography.titleSmall, color = Color.White)
             Spacer(Modifier.height(6.dp))
-            Bullets(evaluation.likelihoodReasons, dotColor = c.slate)
+            Bullets(evaluation.likelihoodReasons, dotColor = Color.White, textColor = Color.White)
         }
         if (evaluation.toRaiseIt.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
-            Text("To raise your chances", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Text("To raise your chances", style = MaterialTheme.typography.titleSmall, color = Color.White)
             Spacer(Modifier.height(6.dp))
-            Bullets(evaluation.toRaiseIt, dotColor = c.good)
+            Bullets(evaluation.toRaiseIt, dotColor = Color.White, textColor = Color.White)
         }
     }
 }
@@ -831,7 +856,8 @@ private fun AnswerReviewCard(index: Int, review: AnswerReview, speakingId: Strin
         if (open) {
             if (review.yourAnswer.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                Text("You said: ${review.yourAnswer}", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                Text("What you said", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                Text("\u201C${review.yourAnswer}\u201D", style = MaterialTheme.typography.bodySmall, color = c.textPrimary)
             }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

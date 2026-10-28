@@ -39,9 +39,12 @@ class RolePackAgent(private val gemini: GeminiClient) {
     private companion object {
         val SYSTEM = """
             You are a UK construction hiring panel chair and interview coach. You prepare one candidate
-            for ONE specific Assistant Site Manager vacancy. Everything you write must be specific to
-            this employer type, project type, location and the requirements in the listing, not
-            generic. Reference real UK practice where relevant: CDM 2015, SMSTS, CSCS, NHBC, RIDDOR,
+            for ONE specific Assistant Site Manager vacancy. Everything you write must come from THIS
+            advert and THIS employer: their named requirements, project type, sector, location,
+            systems, certifications and any employer research provided. Generic site-management
+            content that could apply to any job is a failure. If the advert names something (e.g.
+            NHBC, Procore, live environment, timber frame, S106 affordable homes, a client), the
+            questions must use it by name. Reference real UK practice where relevant: CDM 2015, SMSTS, CSCS, NHBC, RIDDOR,
             temporary works (BS 5975), permits, NEC/JCT, the Building Safety Act, digital site tools.
             Model answers must use only the candidate's real background (10 years roofing,
             waterproofing and drylining; HND Construction; SMSTS; 8 years M&A deal execution),
@@ -58,17 +61,19 @@ class RolePackAgent(private val gemini: GeminiClient) {
                  "voice": "male" | "female" (must match the name; a realistic mix)}
               ] (exactly 3; index 0 is the lead),
               "prepTopics": [
-                {"title": "topic taken from THIS listing's requirements", "whyItMatters": "1 sentence tied to the listing",
+                {"title": "topic taken from THIS listing's requirements", "listingRef": "the exact words from the advert or employer research it comes from (max 20 words)", "whyItMatters": "1 sentence tied to the listing",
                  "points": ["4-5 specific things to know or mention"], "sayThis": "70-100 word spoken talking point in first person"}
               ] (5 topics),
               "questions": [
                 {"category": one of ${QuestionCategory.PACK.joinToString { "\"$it\"" }},
                  "askedBy": panel index 0-2 (match the member's focus),
-                 "question": "the exact question as spoken aloud, max 40 words, specific to this role and listing",
+                 "question": "the exact question as spoken aloud, max 40 words, naming this employer's projects, sector or requirements",
+                 "listingRef": "the exact words from the advert or employer research this question targets (max 20 words)",
                  "lookingFor": "1 sentence: what a strong answer must contain",
                  "modelAnswer": "90-130 word STAR answer in first person",
                  "probes": ["2 follow-ups this interviewer would use if the answer is thin"]}
-              ] (16 questions: 2 per category; include the hard ones a real panel would ask this candidate,
+              ] (16 questions: 2 per category; at least 12 must quote a specific advert requirement in listingRef;
+                 include the hard ones a real panel would ask this candidate,
                  e.g. the 8 years away from site, managing experienced trades, site software they haven't used),
               "scenarios": [
                 {"title": "short name", "briefing": "2-sentence live incident plausible on THIS type of project",

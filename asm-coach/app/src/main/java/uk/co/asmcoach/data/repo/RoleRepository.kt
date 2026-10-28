@@ -96,9 +96,26 @@ class RoleRepository(
             loaded.join()
             val needBrief = force || job.id !in _briefs.value
             val needPack = force || job.id !in _packs.value
-            setProgress(job.id, PrepProgress("Reading the full job listing…"))
-            val description = runCatching { jobs.fullDescription(job) }.getOrDefault(job.snippet)
-            setProgress(job.id, PrepProgress("Writing your brief, prep topics, panel and questions…"))
+            setProgress(job.id, PrepProgress("Reading the full job advert…"))
+            val details = runCatching { jobs.details(job) }.getOrNull() ?: ListingDetails(job.snippet, "search snippet only", job.company)
+            setProgress(job.id, PrepProgress("Researching the employer…"))
+            val research = runCatching { jobs.employerResearch(details.company ?: job.company, details.location ?: job.location) }
+                .getOrDefault(emptyList())
+            val description = buildString {
+                append(details.text)
+                if (research.isNotEmpty()) {
+                    append("\n\nEMPLOYER RESEARCH (recent web results about ${details.company ?: job.company}):\n")
+                    research.forEach { append("- ").append(it).append('\n') }
+                }
+            }
+            val words = details.text.split(Regex("\\s+")).size
+            val basedOn = listOfNotNull(
+                details.source,
+                "%,d words".format(words),
+                research.size.takeIf { it > 0 }?.let { "$it employer sources" },
+            ).joinToString(" · ")
+            val thin = details.source == "search snippet only" || words < 120
+            setProgress(job.id, PrepProgress("Writing prep and questions from the advert…"))
             val profile = settings.current().profile
             val errors = mutableListOf<String>()
             supervisorScope {
@@ -114,7 +131,7 @@ class RoleRepository(
                 }
                 pack?.let { deferred ->
                     runCatching { deferred.await() }
-                        .onSuccess { p -> _packs.update { it + (job.id to p) } }
+                        .onSuccess { p -> _packs.update { it + (job.id to p.copy(basedOn = basedOn, thinSource = thin)) } }
                         .onFailure { if (it is CancellationException) throw it; errors += it.message ?: "Prep failed" }
                 }
             }

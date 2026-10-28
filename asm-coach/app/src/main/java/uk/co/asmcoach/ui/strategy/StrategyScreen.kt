@@ -52,6 +52,9 @@ import uk.co.asmcoach.AppContainer
 import uk.co.asmcoach.data.model.PlanPhase
 import uk.co.asmcoach.data.model.StrategyBrief
 import uk.co.asmcoach.ui.components.Bullets
+import uk.co.asmcoach.ui.theme.Gradients
+import uk.co.asmcoach.ui.components.HeroCard
+import uk.co.asmcoach.ui.components.HeroBadge
 import uk.co.asmcoach.ui.components.IosScreen
 import uk.co.asmcoach.ui.components.NavBackButton
 import uk.co.asmcoach.ui.components.NavIconButton
@@ -105,14 +108,32 @@ fun StrategyScreen(container: AppContainer, onBack: () -> Unit, onPrep: () -> Un
             return@IosScreen
         }
         item {
-            Column(Modifier.padding(top = 8.dp)) {
-                PillBadge("Why you win · ${job.source}")
-                Spacer(Modifier.height(10.dp))
-                Text(job.title, style = MaterialTheme.typography.headlineMedium, color = c.textPrimary)
-                Spacer(Modifier.height(2.dp))
-                val meta = listOfNotNull(job.company, job.location, job.salary).joinToString(" · ")
-                if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+            val brief = state.brief
+            HeroCard(brief?.let { Gradients.forScore(it.compatibilityScore) } ?: Gradients.blue, Modifier.padding(top = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        HeroBadge(brief?.fitLabel?.ifBlank { null } ?: job.source)
+                        Spacer(Modifier.height(10.dp))
+                        Text(job.title, style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                        val meta = listOfNotNull(job.company, job.location, job.salary).joinToString(" · ")
+                        if (meta.isNotBlank()) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(meta, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+                        }
+                    }
+                    if (brief != null) {
+                        Spacer(Modifier.width(12.dp))
+                        ScoreRing(brief.compatibilityScore, size = 84.dp, stroke = 8.dp, caption = "fit", onHero = true)
+                    }
+                }
+                state.pack?.basedOn?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Built from: $it", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.85f))
+                }
             }
+        }
+        if (state.pack?.thinSource == true) {
+            item { ThinSourceCard() }
         }
         state.error?.let { msg ->
             item { ErrorBanner(msg, onDismiss = vm::dismissError, actionLabel = "Retry", onAction = vm::generate) }
@@ -151,6 +172,22 @@ fun StrategyScreen(container: AppContainer, onBack: () -> Unit, onPrep: () -> Un
                 )
             }
         }
+    }
+}
+
+/** Warns when only a search snippet was available, so prep can't be fully specific. */
+@Composable
+fun ThinSourceCard() {
+    val c = AsmTheme.colors
+    TonalCard(tint = c.tintAmber, contentPadding = 14.dp) {
+        Text("Built from a short search snippet", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "The full advert couldn't be read, so some prep will be general. Add a Firecrawl key in Settings " +
+                "(it reads Indeed adverts), then tap \"Rebuild everything for this role\".",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.textSecondary,
+        )
     }
 }
 
@@ -202,18 +239,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.briefContent(
 ) {
     item {
         SurfaceCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ScoreRing(brief.compatibilityScore, size = 104.dp, caption = "fit")
-                Spacer(Modifier.width(18.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(brief.fitLabel.ifBlank { "Compatibility" }, style = MaterialTheme.typography.titleLarge, color = AsmTheme.colors.textPrimary)
-                    Spacer(Modifier.height(4.dp))
-                    Text(brief.matchSummary, style = MaterialTheme.typography.bodyMedium, color = AsmTheme.colors.textSecondary)
-                    if (brief.projectType.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        PillBadge(brief.projectType, color = AsmTheme.colors.slate, background = AsmTheme.colors.tintSlate)
-                    }
-                }
+            Text("How you match", style = MaterialTheme.typography.titleMedium, color = AsmTheme.colors.textPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(brief.matchSummary, style = MaterialTheme.typography.bodyMedium, color = AsmTheme.colors.textSecondary)
+            if (brief.projectType.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                PillBadge(brief.projectType, color = AsmTheme.colors.slate, background = AsmTheme.colors.tintSlate)
             }
         }
     }

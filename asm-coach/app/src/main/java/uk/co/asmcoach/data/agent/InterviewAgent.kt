@@ -1,5 +1,11 @@
 package uk.co.asmcoach.data.agent
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import uk.co.asmcoach.data.model.AnswerReview
 import uk.co.asmcoach.data.model.BankQuestion
 import uk.co.asmcoach.data.model.CandidateProfile
 import uk.co.asmcoach.data.model.PanelMember
@@ -144,11 +150,33 @@ class InterviewAgent(private val gemini: GeminiClient) {
         return r.copy(score = r.score.coerceIn(1, 5))
     }
 
+    /**
+     * Scores the interview in small calls instead of one huge one: a summary (score, offer
+     * likelihood, competencies) plus one review per question thread, at most three at a time.
+     * A failed thread review drops only that card; the summary is required.
+     */
     suspend fun evaluate(
         config: InterviewConfig,
         profile: CandidateProfile,
         transcript: List<Turn>,
-    ): Evaluation {
+    ): Evaluation = coroutineScope {
+        val threads = threadsOf(transcript)
+        val limiter = Semaphore(3)
+        val summary = async { limiter.withPermit { summarise(config, profile, transcript) } }
+        val reviews = threads.mapIndexed { i, thread ->
+            async { limiter.withPermit { runCatching { reviewThread(config, profile, thread, i, threads.size) }.getOrNull() } }
+        }
+        val evaluation = summary.await()
+        val answerReviews = reviews.awaitAll().filterNotNull()
+        evaluation.copy(
+            overallScore = evaluation.overallScore.coerceIn(0, 100),
+            competencies = evaluation.competencies.map { it.copy(score = it.score.coerceIn(0, 100)) },
+            offerLikelihood = evaluation.offerLikelihood.coerceIn(0, 100),
+            answerReviews = answerReviews,
+        )
+    }
+
+    private suspend fun summarise(config: InterviewConfig, profile: CandidateProfile, transcript: List<Turn>): Evaluation {
         val prompt = buildString {
             appendLine(context(config, profile))
             appendLine()
@@ -160,32 +188,52 @@ class InterviewAgent(private val gemini: GeminiClient) {
                 config.askedQuestions.forEach { appendLine("- ${it.question} → ${it.lookingFor}") }
             }
             appendLine()
-            appendLine(EVALUATION_SCHEMA)
+            appendLine(SUMMARY_SCHEMA)
         }
-        val evaluation = gemini.generateStructured(
-            Evaluation.serializer(), SYSTEM_EVALUATOR, prompt, temperature = 0.4f,
-        )
-        return evaluation.copy(
-            overallScore = evaluation.overallScore.coerceIn(0, 100),
-            competencies = evaluation.competencies.map { it.copy(score = it.score.coerceIn(0, 100)) },
-            offerLikelihood = evaluation.offerLikelihood.coerceIn(0, 100),
-            answerReviews = evaluation.answerReviews.map {
-                it.copy(
-                    score = it.score.coerceIn(1, 5),
-                    situation = it.situation.coerceIn(0, 5),
-                    task = it.task.coerceIn(0, 5),
-                    action = it.action.coerceIn(0, 5),
-                    result = it.result.coerceIn(0, 5),
-                )
-            },
-            starCritique = evaluation.starCritique.map {
-                it.copy(
-                    situation = it.situation.coerceIn(0, 5),
-                    task = it.task.coerceIn(0, 5),
-                    action = it.action.coerceIn(0, 5),
-                    result = it.result.coerceIn(0, 5),
-                )
-            },
+        return gemini.generateStructured(Evaluation.serializer(), SYSTEM_EVALUATOR, prompt, temperature = 0.3f, fast = true)
+    }
+
+    /** One main question with its follow-ups and the candidate's answers. */
+    private data class Thread(val question: String, val turns: List<Turn>, val lookingFor: String)
+
+    private fun threadsOf(transcript: List<Turn>): List<Thread> {
+        val out = mutableListOf<MutableList<Turn>>()
+        transcript.forEach { turn ->
+            if (turn.speaker == Speaker.Interviewer && !turn.followUp) out += mutableListOf(turn) else out.lastOrNull()?.add(turn)
+        }
+        return out.filter { t -> t.any { it.speaker == Speaker.Candidate } }
+            .map { t -> Thread(t.first().text, t, "") }
+    }
+
+    private suspend fun reviewThread(
+        config: InterviewConfig,
+        profile: CandidateProfile,
+        thread: Thread,
+        index: Int,
+        count: Int,
+    ): AnswerReview {
+        val lookingFor = config.askedQuestions.firstOrNull { thread.question.contains(it.question.take(40)) }?.lookingFor.orEmpty()
+        val prompt = buildString {
+            appendLine(profile.toPromptBlock())
+            config.job?.let { appendLine("Role: ${it.title}${it.company?.let { c -> " at $c" } ?: ""}") }
+            appendLine()
+            appendLine("QUESTION ${index + 1} OF $count, WITH FOLLOW-UPS")
+            appendLine(thread.turns.render())
+            if (lookingFor.isNotBlank()) appendLine("A strong answer contains: $lookingFor")
+            appendLine()
+            appendLine(REVIEW_SCHEMA)
+        }
+        val r = gemini.generateStructured(AnswerReview.serializer(), SYSTEM_EVALUATOR, prompt, temperature = 0.3f, fast = true)
+        // Show the candidate's own words verbatim rather than a model summary.
+        val said = thread.turns.filter { it.speaker == Speaker.Candidate }.joinToString(" … ") { it.text }
+        return r.copy(
+            question = thread.question.replace(Regex("^Thanks for coming in[^.]*\\. I'm [^.]*\\.\\s*"), ""),
+            yourAnswer = said,
+            score = r.score.coerceIn(1, 5),
+            situation = r.situation.coerceIn(0, 5),
+            task = r.task.coerceIn(0, 5),
+            action = r.action.coerceIn(0, 5),
+            result = r.result.coerceIn(0, 5),
         )
     }
 
@@ -238,9 +286,8 @@ class InterviewAgent(private val gemini: GeminiClient) {
             Respond with JSON only.
         """.trimIndent()
 
-        val EVALUATION_SCHEMA = """
-            Group the transcript into question threads: each main question plus its follow-ups.
-            Return a single JSON object:
+        val SUMMARY_SCHEMA = """
+            Return a single JSON object (do NOT review answers one by one; that is done separately):
             {
               "overallScore": integer 0-100 readiness score,
               "readinessBand": "Interview-ready" | "Nearly there" | "Needs practice" | "Not yet",
@@ -253,16 +300,18 @@ class InterviewAgent(private val gemini: GeminiClient) {
               "redFlags": ["anything a real panel would mark down hard: unsafe statements, wrong law, blame, vagueness; empty if none"],
               "competencies": [{"name": "e.g. H&S leadership", "score": 0-100}] (5-7 items relevant to the role),
               "strengths": ["3 specific strengths with quotes or evidence"],
-              "improvements": ["3 specific, actionable improvements"],
-              "answerReviews": [{
-                 "question": "the main question",
-                 "yourAnswer": "1-2 sentence summary of what the candidate actually said, including follow-ups",
-                 "score": 1-5 (1 poor, 3 acceptable, 5 outstanding),
-                 "situation": 0-5, "task": 0-5, "action": 0-5, "result": 0-5,
-                 "whatWorked": "1 sentence",
-                 "whatWasMissing": "1-2 sentences: the specific gap and why a panel cares",
-                 "betterAnswer": "the exact 90-140 word answer they should have given, first person, using only their real background"
-              }] (one per question thread, in order)
+              "improvements": ["3 specific, actionable improvements"]
+            }
+        """.trimIndent()
+
+        val REVIEW_SCHEMA = """
+            Review this one question thread as the panel would. Return JSON:
+            {
+              "score": 1-5 (1 poor, 3 acceptable, 5 outstanding),
+              "situation": 0-5, "task": 0-5, "action": 0-5, "result": 0-5,
+              "whatWorked": "1 sentence quoting what they said that helped",
+              "whatWasMissing": "1-2 sentences: the specific gap and why this panel cares",
+              "betterAnswer": "the exact 90-140 word answer they should have given, first person, using only their real background"
             }
         """.trimIndent()
     }

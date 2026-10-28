@@ -1,6 +1,14 @@
 package uk.co.asmcoach.ui.prep
 
 import androidx.compose.foundation.layout.Arrangement
+import uk.co.asmcoach.ui.theme.Gradients
+import uk.co.asmcoach.ui.strategy.ThinSourceCard
+import uk.co.asmcoach.ui.components.HeroCard
+import uk.co.asmcoach.ui.components.HeroBadge
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import uk.co.asmcoach.ui.components.ScoreRing
 import uk.co.asmcoach.data.persist.DrillResult
 import uk.co.asmcoach.data.content.PrepChecklist
@@ -135,6 +143,17 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
             else -> {
                 val readiness = PrepViewModel.readiness(job.id, pack, practice)
                 item { ReadinessCard(readiness, onInterview) }
+                if (pack.thinSource) item { ThinSourceCard() }
+                if (pack.basedOn.isNotBlank()) {
+                    item {
+                        Text(
+                            "Built from: ${pack.basedOn}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textSecondary,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                }
                 if (pack.roleSummary.isNotBlank()) {
                     item {
                         TonalCard(tint = c.tintSlate) {
@@ -162,6 +181,10 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                         onToggle = { vm.toggleLesson(id) },
                         tint = c.surface,
                     ) {
+                        if (topic.listingRef.isNotBlank()) {
+                            AdvertQuote(topic.listingRef)
+                            Spacer(Modifier.height(10.dp))
+                        }
                         Bullets(topic.points)
                         if (topic.sayThis.isNotBlank()) {
                             Spacer(Modifier.height(14.dp))
@@ -188,6 +211,10 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
                         expanded = id in state.expandedLessons,
                         onToggle = { vm.toggleLesson(id) },
                     ) {
+                        if (q.listingRef.isNotBlank()) {
+                            AdvertQuote(q.listingRef)
+                            Spacer(Modifier.height(10.dp))
+                        }
                         if (q.lookingFor.isNotBlank()) {
                             Text("They're looking for", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
                             Spacer(Modifier.height(2.dp))
@@ -276,18 +303,17 @@ fun PrepScreen(container: AppContainer, onOpenSettings: () -> Unit, onOpenJobs: 
 
 @Composable
 private fun ReadinessCard(r: Readiness, onInterview: () -> Unit) {
-    val c = AsmTheme.colors
-    TonalCard(tint = if (r.percent >= 80) c.tintSage else if (r.percent >= 45) c.tintAmber else c.tintRose) {
+    HeroCard(if (r.percent >= 80) Gradients.green else Gradients.blue) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ScoreRing(r.percent, size = 96.dp, stroke = 9.dp, caption = "ready")
-            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text("Interview readiness", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-                Text(r.verdict, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
+                HeroBadge("Interview readiness")
+                Spacer(Modifier.height(8.dp))
+                Text(r.verdict, style = MaterialTheme.typography.headlineSmall, color = Color.White)
                 r.lastOfferLikelihood?.let {
-                    Text("Last mock: ${r.lastInterviewScore}/100 · offer chance $it%", style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                    Text("Last mock: ${r.lastInterviewScore}/100 · offer chance $it%", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
                 }
             }
+            ScoreRing(r.percent, size = 92.dp, stroke = 9.dp, caption = "ready", onHero = true)
         }
         Spacer(Modifier.height(14.dp))
         ReadinessBar(
@@ -299,28 +325,48 @@ private fun ReadinessCard(r: Readiness, onInterview: () -> Unit) {
         ReadinessBar("Preparation steps", "${r.checklistDone}/${r.checklistTotal}", r.checklistDone.toFloat() / r.checklistTotal.coerceAtLeast(1))
         ReadinessBar("Mock interview", r.lastInterviewScore?.let { "$it/100" } ?: "not done", (r.lastInterviewScore ?: 0) / 100f)
         if (r.nextSteps.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Text("Do next", style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+            Spacer(Modifier.height(12.dp))
+            Text("Do next", style = MaterialTheme.typography.titleSmall, color = Color.White)
             Spacer(Modifier.height(6.dp))
-            Bullets(r.nextSteps.take(4))
+            Bullets(r.nextSteps.take(3), dotColor = Color.White, textColor = Color.White)
         }
         if (r.percent >= 50) {
             Spacer(Modifier.height(12.dp))
-            SecondaryButton("Mock interview", onClick = onInterview, icon = Icons.Rounded.Mic)
+            Text(
+                "Start mock interview →",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                modifier = Modifier.clickable(onClick = onInterview).padding(vertical = 6.dp),
+            )
         }
     }
 }
 
 @Composable
 private fun ReadinessBar(label: String, value: String, fraction: Float) {
-    val c = AsmTheme.colors
-    Column(Modifier.padding(vertical = 5.dp)) {
+    Column(Modifier.padding(vertical = 4.dp)) {
         Row {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = c.textPrimary, modifier = Modifier.weight(1f))
-            Text(value, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.White, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.85f))
         }
         Spacer(Modifier.height(4.dp))
-        MeterBar(fraction, c.accent)
+        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.25f))) {
+            Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color.White))
+        }
+    }
+}
+
+/** The advert line a topic or question comes from, styled as a quote. */
+@Composable
+private fun AdvertQuote(text: String) {
+    val c = AsmTheme.colors
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(c.accent))
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text("From the advert", style = MaterialTheme.typography.labelMedium, color = c.accent)
+            Text("\u201C$text\u201D", style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
+        }
     }
 }
 

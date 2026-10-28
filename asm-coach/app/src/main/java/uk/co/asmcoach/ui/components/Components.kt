@@ -73,6 +73,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -317,6 +318,32 @@ fun TonalCard(
         content = content,
     )
 }
+
+/** Gradient summary card with white content, like the Fitness and Health hero tiles. */
+@Composable
+fun HeroCard(
+    colors: List<Color>,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    contentPadding: Dp = 20.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val haptics = rememberHaptics()
+    Column(
+        modifier
+            .fillMaxWidth()
+            .shadow(10.dp, ContinuousShape(24.dp), ambientColor = colors.first(), spotColor = colors.first())
+            .clip(ContinuousShape(24.dp))
+            .background(Brush.linearGradient(colors))
+            .then(if (onClick != null) Modifier.clickable { haptics.tap(); onClick() } else Modifier)
+            .padding(contentPadding),
+        content = content,
+    )
+}
+
+/** Translucent white capsule for use on hero cards. */
+@Composable
+fun HeroBadge(text: String) = PillBadge(text, color = Color.White, background = Color.White.copy(alpha = 0.22f))
 
 /** Capsule badge with a tinted fill. */
 @Composable
@@ -594,7 +621,12 @@ fun ReadAloudBox(
 }
 
 @Composable
-fun Bullets(items: List<String>, modifier: Modifier = Modifier, dotColor: Color = AsmTheme.colors.accent) {
+fun Bullets(
+    items: List<String>,
+    modifier: Modifier = Modifier,
+    dotColor: Color = AsmTheme.colors.accent,
+    textColor: Color = AsmTheme.colors.textPrimary,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEach { item ->
             Row {
@@ -606,7 +638,7 @@ fun Bullets(items: List<String>, modifier: Modifier = Modifier, dotColor: Color 
                         .background(dotColor),
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(item, style = IosType.subheadline, color = AsmTheme.colors.textPrimary)
+                Text(item, style = IosType.subheadline, color = textColor)
             }
         }
     }
@@ -647,21 +679,29 @@ fun ChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
 
 /** Activity-ring style gauge out of 100. */
 @Composable
-fun ScoreRing(score: Int, modifier: Modifier = Modifier, size: Dp = 120.dp, stroke: Dp = 10.dp, caption: String? = "/ 100") {
+fun ScoreRing(
+    score: Int,
+    modifier: Modifier = Modifier,
+    size: Dp = 120.dp,
+    stroke: Dp = 10.dp,
+    caption: String? = "/ 100",
+    onHero: Boolean = false,
+) {
     val c = AsmTheme.colors
     val progress by animateFloatAsState(score.coerceIn(0, 100) / 100f, IosMotion.spring(), label = "score")
-    val color = c.scoreColor(score)
+    val color = if (onHero) Color.White else c.scoreColor(score)
+    val textColor = if (onHero) Color.White else c.textPrimary
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             val strokePx = stroke.toPx()
             val inset = strokePx / 2
             val arcSize = Size(this.size.width - strokePx, this.size.height - strokePx)
-            drawArc(color.copy(alpha = 0.18f), -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(strokePx))
+            drawArc(color.copy(alpha = if (onHero) 0.28f else 0.18f), -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(strokePx))
             drawArc(color, -90f, 360f * progress, false, Offset(inset, inset), arcSize, style = Stroke(strokePx, cap = StrokeCap.Round))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("$score", style = if (size >= 110.dp) IosType.title1 else IosType.title3, color = c.textPrimary)
-            if (caption != null) Text(caption, style = IosType.caption1, color = c.textSecondary)
+            Text("$score", style = if (size >= 110.dp) IosType.title1 else IosType.title3, color = textColor)
+            if (caption != null) Text(caption, style = IosType.caption1, color = textColor.copy(alpha = 0.7f))
         }
     }
 }
